@@ -1,0 +1,160 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+// Looking for ways to speed up your queries, or scale easily with your serverless or edge functions?
+// Try Prisma Accelerate: https://pris.ly/cli/accelerate-init
+
+generator client {
+  provider = "prisma-client-js"
+  engineType = "client"  // Enables the new Prisma 7 engine
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+model User {
+  id        String   @id @default(uuid())
+  email     String   @unique
+  role      Role     @default(ARTIST)
+  name      String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // Relations
+  profiles     Profile[]
+  contributors Contributor[]
+  signatures   Signature[]  // Added: Users can sign split sheets
+}
+
+enum Role {
+  ARTIST
+  LABEL
+  ADMIN
+}
+
+model Profile {
+  id     String @id @default(uuid())
+  userId String @unique
+  name   String?
+  bio    String?
+  avatar String?
+  role   Role? @default(ARTIST)  // Optional, but defaults to ARTIST
+  labelId String?
+
+  label  Label? @relation(fields: [labelId], references: [id])
+
+  user   User   @relation(fields: [userId], references: [id])
+}
+
+model Song {
+  id           String   @id @default(uuid())
+  workingTitle String?  // Added: Working title for early stages
+  finalTitle   String   // Added: Final title; required
+  iswc         String?  // International Standard Work Code
+  creationDate DateTime? // Added: Date of song creation
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  splitSheets  SplitSheet[]
+}
+
+model SplitSheet {
+  id                 String   @id @default(uuid())
+  songId             String
+  createdBy          String?
+  version            Int      @default(1)  // Added: Version tracking for revisions
+  agreementDate      DateTime?  // Added: Date of the agreement
+  status             Status   @default(DRAFT)
+  totalPercentage    Float    @default(0)  // App logic should enforce == 100
+  clauses            String?  // Added: Text field for additional clauses/waivers
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
+  publishedAt        DateTime?
+  reversedAt         DateTime?  // Added: Timestamp for reversals
+  reversalReason     String?    // Added: Required for legal audit of reversals
+
+  song               Song       @relation(fields: [songId], references: [id])
+  contributors       Contributor[]
+  signatures         Signature[]  // Added: E-signatures for binding agreement
+  auditLogs          AuditLog[]
+}
+
+model Label {
+  id        String   @id @default(uuid())
+  name      String
+  createdAt DateTime @default(now())
+
+  profiles  Profile[]
+}
+
+enum Status {
+  DRAFT
+  PENDING
+  SIGNED
+  PUBLISHED
+  REVERSED
+}
+
+model Contributor {
+  id              String   @id @default(uuid())
+  splitSheetId    String
+  userId          String?  // Optional link to registered user
+  legalName       String   // Added: Full legal name (required for binding agreements)
+  stageName       String?  // Added: Optional alias/stage name
+  role            String   // e.g., "Composer", "Lyricist", "Producer"
+  percentage      Float
+  proAffiliation  String?  // Added: PRO like ASCAP, BMI, SESAC
+  ipiNumber       String?  // Added: IPI/CAE number for PRO registration
+  publisher       String?  // Added: Publishing entity (self or company)
+  publisherShare  Float?   // Added: Often 50% default, but customizable
+  contactEmail    String?  // Added: Contact info for legal notifications
+  contactPhone    String?  // Added
+  address         String?  // Added: Mailing address for formal agreements
+
+  splitSheet      SplitSheet @relation(fields: [splitSheetId], references: [id])
+  user            User?      @relation(fields: [userId], references: [id])
+  signatures      Signature[]  // Added: Contributors sign the sheet
+}
+
+model Signature {
+  id           String   @id @default(uuid())
+  splitSheetId String
+  contributorId String?  // Link to Contributor (or User if registered)
+  userId       String?  // Optional: If signed by a registered user
+  signatureData String?  // Added: E-sign data (e.g., base64 image, hash, or DocuSign ID)
+  signedAt     DateTime @default(now())
+  ipAddress    String?  // Added: For legal audit/proof of signing
+  deviceInfo   String?  // Added: Browser/user-agent for e-sign compliance
+  consentText  String?  // Added: Text confirming agreement (for legal binding)
+
+  splitSheet   SplitSheet @relation(fields: [splitSheetId], references: [id])
+  contributor  Contributor? @relation(fields: [contributorId], references: [id])
+  user         User?       @relation(fields: [userId], references: [id])
+}
+
+model AuditLog {
+  id           String   @id @default(uuid())
+  splitSheetId String
+  action       String   // e.g., "CREATE", "SIGN", "REVERSE", "UPDATE_PERCENTAGE"
+  performedBy  String?  // userId or admin name
+  reason       String?
+  timestamp    DateTime @default(now())
+  oldValue     String?  // Added: JSON string of previous state for reversals
+  newValue     String?  // Added: JSON string of new state
+
+  splitSheet   SplitSheet @relation(fields: [splitSheetId], references: [id])
+}
+
+model InviteCode {
+  id        String   @id @default(uuid())
+  code      String   @unique // e.g., "LABEL-2026-XYZ123"
+  role      Role     // Which role this code grants
+  createdBy String?  // Admin userId who created it
+  createdAt DateTime @default(now())
+  expiresAt DateTime? // Optional expiration
+  usedBy    String?  // UserId who redeemed it
+  usedAt    DateTime?
+
+  // Optional: Link to creator if you add admin relations later
+}
