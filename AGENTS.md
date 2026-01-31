@@ -2,6 +2,37 @@
 
 This file contains guidelines and commands for agentic coding agents working in this repository.
 
+## Development Environment Setup
+
+### **⚠️ IMPORTANT: Cross-Platform Development Environment**
+This project uses a **hybrid WSL/Windows development environment**:
+
+- **WSL Environment**: Used for file editing and agent operations (you, opencode)
+- **Windows Environment**: Used for development server execution and testing (user in VS Code Windows terminal)
+- **File System**: Windows file system mounted in WSL at `/mnt/c/Users/`
+
+### **Development Workflow**
+1. **Code Changes**: Made through opencode in WSL environment
+2. **Build & Test**: Executed by user in Windows VS Code terminal
+3. **Cross-Platform Compatibility**: Must ensure all commands work in Windows environment
+4. **Binary Compatibility**: Tailwind CSS v4 has platform-specific binaries that cause issues
+
+### **Common Issues & Solutions**
+- **Lightning CSS Binary Error**: `Cannot find module '../lightningcss.win32-x64-msvs.node'`
+- **Solution**: Clean rebuild with proper platform binaries
+- **Required**: Delete `.next` and sometimes `node_modules` before rebuilding
+
+### **Development Commands for Windows**
+- **Primary Command**: `npm run setup:windows` (cleans and rebuilds)
+- **Clean Command**: `npm run dev:clean` (removes .next and restarts)
+- **Fallback Command**: Delete `.next` folder manually then `npm run dev`
+
+### **Code Implementation Guidelines**
+- **Platform Awareness**: All implementations must work in Windows environment
+- **File Paths**: Use Windows-compatible paths and commands
+- **Dependencies**: Ensure all packages work cross-platform
+- **Scripts**: Provide both WSL and Windows variants when needed
+
 ## Development Commands
 
 ### Core Commands

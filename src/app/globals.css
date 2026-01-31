@@ -1,5 +1,8 @@
 @import "tailwindcss";
 
+/* Fallback styles for Tailwind v4 compatibility issues */
+@import "./fallback-styles.css" layer(base);
+
 @theme inline {
   /* Core colors - modern dark-first palette with vibrant accents */
   --color-background: #0a0a0a;
@@ -102,4 +105,43 @@
 /* ==================== */
 @utility animate-pulse-slow {
   animation: pulse 3s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+}
+
+/* ==================== */
+/* Advanced Glass Morphism */
+/* ==================== */
+@utility glass-sidebar {
+  background: linear-gradient(
+    135deg, 
+    rgba(255, 255, 255, 0.08) 0%,
+    rgba(255, 255, 255, 0.02) 100%
+  );
+  backdrop-filter: blur(20px) saturate(180%);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 0; /* No corners - modern sharp look */
+  box-shadow: 
+    0 8px 32px rgba(0, 0, 0, 0.35),
+    inset 0 1px 0 rgba(255, 255, 255, 0.1);
+}
+
+/* ==================== */
+/* Animated Glow Border */
+/* ==================== */
+@utility glow-border {
+  position: relative;
+  background: linear-gradient(90deg, #7c3aed, #c084fc, #7c3aed);
+  background-size: 200% 100%;
+  animation: shimmer 3s ease-in-out infinite;
+}
+
+@keyframes shimmer {
+  0%, 100% { background-position: 0% 50%; }
+  50% { background-position: 100% 50%; }
+}
+
+/* ==================== */
+/* Enhanced Shadow Glow */
+/* ==================== */
+@utility shadow-glow {
+  box-shadow: 0 0 30px var(--color-glow);
 }
