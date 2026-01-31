@@ -2,9 +2,25 @@
 import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 
+// Helper function to generate username from user metadata
+function generateUsernameFromMetadata(email: string, name?: string): string {
+  if (name) {
+    // Generate from name
+    const nameParts = name.toLowerCase().replace(/[^a-z\s]/g, '').split(' ').filter(Boolean);
+    if (nameParts.length >= 2) {
+      return `${nameParts[0]}-${nameParts[nameParts.length - 1]}`;
+    } else if (nameParts.length === 1) {
+      return nameParts[0];
+    }
+  }
+  
+  // Fallback to email
+  return email.split('@')[0].toLowerCase();
+}
+
 export async function POST(request: Request) {
   try {
-    const { supabaseUserId, email, name } = await request.json();
+    const { supabaseUserId, email, name, username } = await request.json();
 
     // 1. Check if Prisma User exists
     let prismaUser = await prisma.user.findUnique({
@@ -17,8 +33,17 @@ export async function POST(request: Request) {
         data: {
           id: supabaseUserId,
           email,
+          username: username ? username.toLowerCase() : generateUsernameFromMetadata(email, name),
           name: name || null,
           role: 'ARTIST',
+        },
+      });
+    } else if (username && !prismaUser.username) {
+      // Update existing user with username if they don't have one
+      prismaUser = await prisma.user.update({
+        where: { id: supabaseUserId },
+        data: {
+          username: username.toLowerCase(),
         },
       });
     }

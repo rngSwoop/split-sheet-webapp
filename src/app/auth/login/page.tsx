@@ -8,7 +8,7 @@ import GlassButton from '@/components/ui/GlassButton';
 import Link from 'next/link';
 
 export default function Login() {
-  const [email, setEmail] = useState('');
+  const [identifier, setIdentifier] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
@@ -19,13 +19,41 @@ export default function Login() {
   setError(null);
   setLoading(true);
 
-  // 1. Attempt login with Supabase
-  const { data, error: loginError } = await supabaseClient.auth.signInWithPassword({
-    email,
+  // 1. Determine if identifier is email or username
+  let emailToUse = identifier;
+  
+  // If not an email, lookup user by username to get email
+  if (!identifier.includes('@') || !identifier.includes('.')) {
+    try {
+      const lookupResponse = await fetch('/api/auth/lookup-user', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ identifier }),
+      });
+
+      if (!lookupResponse.ok) {
+        const errorData = await lookupResponse.json();
+        setError(errorData.error || 'Username lookup failed');
+        setLoading(false);
+        return;
+      }
+
+      const { email } = await lookupResponse.json();
+      emailToUse = email;
+    } catch {
+      setError('Username lookup failed');
+      setLoading(false);
+      return;
+    }
+  }
+
+  // 2. Attempt login with Supabase using email
+  const { error: loginError } = await supabaseClient.auth.signInWithPassword({
+    email: emailToUse,
     password,
   });
 
-  // 2. Handle login errors immediately
+  // 3. Handle login errors immediately
   if (loginError) {
     setError(loginError.message);
     setLoading(false);
@@ -83,16 +111,16 @@ export default function Login() {
         </h1>
         <form onSubmit={handleLogin} className="space-y-6">
           <div>
-            <label htmlFor="email" className="block text-sm font-medium mb-2 opacity-90">
-              Email Address
+            <label htmlFor="identifier" className="block text-sm font-medium mb-2 opacity-90">
+              Email or Username
             </label>
             <input
-              id="email"
-              type="email"
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
+              id="identifier"
+              type="text"
+              value={identifier}
+              onChange={(e) => setIdentifier(e.target.value)}
               className="w-full p-4 bg-[var(--color-glass-dark)] backdrop-blur-sm border border-white/10 rounded-xl text-white placeholder-gray-400 focus:border-[var(--color-accent)] focus:ring-2 focus:ring-[var(--color-glow)] focus:outline-none transition-all"
-              placeholder="Enter your email"
+              placeholder="Enter your email or username"
               required
               disabled={loading}
             />

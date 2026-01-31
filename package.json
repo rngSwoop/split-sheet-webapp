@@ -4,13 +4,19 @@
   "private": true,
   "scripts": {
     "dev": "prisma generate && next dev",
+    "dev:windows": "npm run dev",
+    "dev:linux": "echo 'Use Windows environment for development (VS Code)'",
     "build": "prisma generate && next build",
     "start": "next start",
     "lint": "eslint",
-    "db:push": "dotenv -e .env.local -- prisma db push",
-    "db:migrate": "dotenv -e .env.local -- prisma migrate dev",
-    "db:studio": "dotenv -e .env.local -- prisma studio",
-    "prisma:generate": "prisma generate"
+    "db:push": "dotenv -e .env -- prisma db push",
+    "db:migrate": "dotenv -e .env -- prisma migrate dev",
+    "db:studio": "dotenv -e .env -- prisma studio",
+    "prisma:generate": "prisma generate",
+    "clean:build": "rimraf .next",
+    "clean:all": "rimraf .next node_modules",
+    "reset:env": "rm .env && mv .env.backup .env 2>/dev/null || echo 'No .env.backup found'",
+    "setup:windows": "npm run clean:build && npm run dev:windows"
   },
   "dependencies": {
     "@prisma/adapter-pg": "^7.2.0",
@@ -36,6 +42,7 @@
     "eslint": "^9",
     "eslint-config-next": "16.1.1",
     "prisma": "^7.2.0",
+    "rimraf": "^6.1.2",
     "tailwindcss": "^4",
     "typescript": "^5"
   }
