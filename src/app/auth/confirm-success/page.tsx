@@ -5,6 +5,7 @@ import { useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import GlassButton from '@/components/ui/GlassButton';
 import { supabaseClient } from '@/lib/supabase/client';
+import { getDashboardRoute } from '@/lib/utils';
 
 export default function ConfirmSuccess() {
   const router = useRouter();
@@ -18,7 +19,23 @@ export default function ConfirmSuccess() {
       });
 
       if (!error) {
-        router.push('/role-selection');
+        // Get user role after login and route to appropriate dashboard
+        const { data: { user } } = await supabaseClient.auth.getUser();
+        if (user) {
+          // Get user role from API
+          const roleResponse = await fetch('/api/profiles/get-role', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ userId: user.id }),
+          });
+          
+          if (roleResponse.ok) {
+            const { role } = await roleResponse.json();
+            router.push(getDashboardRoute(role));
+            return;
+          }
+        }
+        router.push('/dashboard/artist'); // fallback
       } else {
         alert('Email confirmed! Please log in manually.');
         router.push('/auth/login');

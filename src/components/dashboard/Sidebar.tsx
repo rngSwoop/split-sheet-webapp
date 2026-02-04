@@ -84,8 +84,8 @@ export default function Sidebar({ userRole, currentPage = 'dashboard', currentVi
           "fixed left-0 top-0 h-full glass-sidebar border-r border-white/12 z-40 hidden md:block",
           "transition-all duration-300 ease-out"
         )}
-        initial={false}
-        animate={{ width: isExpanded ? 256 : 64 }}
+        style={{ width: '64px' }}
+        animate={{ width: isExpanded ? '256px' : '64px' }}
         onMouseEnter={handleMouseEnter}
         onMouseLeave={handleMouseLeave}
       >

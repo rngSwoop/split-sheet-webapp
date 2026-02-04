@@ -49,24 +49,31 @@ export async function POST(request: Request) {
     }
 
     // 2. Check if Profile exists
-    const existingProfile = await prisma.profile.findUnique({
+    let profile = await prisma.profile.findUnique({
       where: { userId: prismaUser.id },
     });
 
-    if (existingProfile) {
-      return NextResponse.json({ profile: existingProfile }, { status: 200 });
+    if (profile) {
+      // Ensure profile role matches user role for consistency
+      if (profile.role !== prismaUser.role) {
+        profile = await prisma.profile.update({
+          where: { userId: prismaUser.id },
+          data: { role: prismaUser.role },
+        });
+      }
+      return NextResponse.json({ profile }, { status: 200 });
     }
 
-    // 3. Create Profile
-    const profile = await prisma.profile.create({
+    // 3. Create Profile with user's role for consistency
+    const newProfile = await prisma.profile.create({
       data: {
         userId: prismaUser.id,
         name: name || null,
-        role: 'ARTIST',
+        role: prismaUser.role,
       },
     });
 
-    return NextResponse.json({ profile }, { status: 201 });
+    return NextResponse.json({ profile: newProfile }, { status: 201 });
   } catch (error) {
     console.error('Profile sync error:', error);
     return NextResponse.json({ error: 'Failed to sync profile' }, { status: 500 });

@@ -49,11 +49,16 @@ export default function LabelDashboardPage() {
 	}
 
 	return (
-		<div className="glass-card p-8 max-w-4xl mx-auto">
-			<h1 className="text-3xl font-bold gradient-text mb-6">Label Dashboard</h1>
-			<p className="mb-4">View your roster and their split sheets.</p>
+		<>
+			{/* Dashboard Header */}
+			<header className="glass-card p-6 mb-8 max-w-4xl mx-auto">
+				<h1 className="text-3xl font-bold gradient-text">Label Dashboard</h1>
+			</header>
+
+			{/* Dashboard Content */}
+			<div className="glass-card p-8 max-w-4xl mx-auto">
+				<p className="mb-4">View your roster and their split sheets.</p>
 			<div className="mb-4 flex gap-2">
-				<GlassButton onClick={() => (window.location.href = '/dashboard/admin')}>Admin Tools</GlassButton>
 				<GlassButton onClick={() => setShowAdd(true)}>Add Artist</GlassButton>
 			</div>
 			{showAdd && (
@@ -101,5 +106,6 @@ export default function LabelDashboardPage() {
 				)}
 			</div>
 		</div>
+		</>
 	);
 }

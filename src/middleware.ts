@@ -43,8 +43,31 @@ export async function middleware(req: NextRequest) {
         select: { role: true },
       });
 
-      const rolePath = (prismaUser?.role || 'ARTIST').toLowerCase();
-      return NextResponse.redirect(new URL(`/dashboard/${rolePath}`, req.url));
+      if (prismaUser) {
+        const rolePath = prismaUser.role.toLowerCase();
+        return NextResponse.redirect(new URL(`/dashboard/${rolePath}`, req.url));
+      }
+      // Fallback to ARTIST if user not found
+      return NextResponse.redirect(new URL('/dashboard/artist', req.url));
+    }
+  }
+
+  // Protect role-specific dashboard routes
+  if (req.nextUrl.pathname.startsWith('/dashboard/')) {
+    const pathSegments = req.nextUrl.pathname.split('/');
+    const requestedRole = pathSegments[2]?.toUpperCase(); // Extract role from /dashboard/role/...
+    
+    if (user && requestedRole && ['ARTIST', 'LABEL', 'ADMIN'].includes(requestedRole)) {
+      const prismaUser = await prisma.user.findUnique({
+        where: { id: user.id },
+        select: { role: true },
+      });
+
+      if (prismaUser && prismaUser.role !== requestedRole) {
+        // Redirect to correct dashboard if accessing wrong role
+        const correctRolePath = prismaUser.role.toLowerCase();
+        return NextResponse.redirect(new URL(`/dashboard/${correctRolePath}`, req.url));
+      }
     }
   }
 

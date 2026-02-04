@@ -1,139 +1,144 @@
-// src/app/dashboard/[role]/page.tsx
+// src/app/dashboard/admin/page.tsx
 'use client';
 
 import { useEffect, useState } from 'react';
-import { useRouter, useParams, usePathname } from 'next/navigation';
-import { supabaseClient } from '@/lib/supabase/client';
 import GlassButton from '@/components/ui/GlassButton';
 
-const roleComponents: Record<string, React.FC> = {
-  artist: ArtistDashboard,
-  label: LabelDashboard,
-  admin: AdminDashboard,
-};
-
-function DefaultDashboard() {
-  return (
-    <div className="p-8 text-center">
-      <h1 className="text-3xl font-bold gradient-text">Welcome</h1>
-      <p className="mt-4">Your dashboard is loading...</p>
-    </div>
-  );
-}
-
-export default function Dashboard() {
-  const params = useParams();
-  const pathname = usePathname();
-  const roleFromParams = (params.role as string)?.toLowerCase();
-  const roleFromPath = pathname ? pathname.split('/')[2] : undefined;
-  const role = roleFromParams || roleFromPath || 'artist';
-  const [userRole, setUserRole] = useState<string | null>(null);
-  const router = useRouter();
-
-  useEffect(() => {
-    const checkRole = async () => {
-      try {
-        const { data: { user } } = await supabaseClient.auth.getUser();
-        if (!user) {
-          router.push('/auth/login');
-          return;
-        }
-
-        // Fetch actual role from Prisma
-        const response = await fetch('/api/profiles/get-role', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ userId: user.id }),
-        });
-
-        if (!response.ok) {
-          console.error('get-role failed', response.status);
-          router.push('/auth/login');
-          return;
-        }
-
-        const data = await response.json();
-        const fetchedRole = String(data.role || '').toLowerCase();
-
-        // Redirect if URL role doesn't match actual role (only when params were used)
-        if (fetchedRole && roleFromParams && fetchedRole !== role) {
-          router.replace(`/dashboard/${fetchedRole}`);
-          return;
-        }
-
-        setUserRole(fetchedRole || role);
-      } catch (err) {
-        console.error('role check error', err);
-        router.push('/auth/login');
-      }
-    };
-
-    checkRole();
-  }, [router, params.role]);
-
-  if (!userRole) return <div className="min-h-screen flex items-center justify-center">Loading...</div>;
-
-  const activeRole = (userRole || role).toLowerCase();
-  const DashboardComponent = roleComponents[activeRole] || DefaultDashboard;
-
-  return (
-    <div className="min-h-screen bg-gradient-to-br from-gray-900 via-black to-gray-900 p-8">
-      <DashboardComponent />
-    </div>
-  );
-}
-
-// Stub dashboards (expand these later)
-function ArtistDashboard() {
-  return (
-    <div className="glass-card p-8 max-w-4xl mx-auto">
-      <h1 className="text-3xl font-bold gradient-text mb-6">Artist Dashboard</h1>
-      <p>Create and manage your split sheets here.</p>
-      <GlassButton className="mt-6" onClick={() => (window.location.href = '/splits/new')}>New Split Sheet</GlassButton>
-    </div>
-  );
-}
-
-function LabelDashboard() {
-  return (
-    <div className="glass-card p-8 max-w-4xl mx-auto">
-      <h1 className="text-3xl font-bold gradient-text mb-6">Label Dashboard</h1>
-      <p>Review and approve artist submissions.</p>
-    </div>
-  );
-}
-
-function AdminDashboard() {
+export default function AdminDashboard() {
   const [accounts, setAccounts] = useState<Array<any>>([]);
   const [createdInvites, setCreatedInvites] = useState<Array<any>>([]);
   const [loading, setLoading] = useState(true);
+  const [authError, setAuthError] = useState(false);
+  const [inviteRole, setInviteRole] = useState<'LABEL' | 'ADMIN'>('LABEL');
+  const [newInviteCode, setNewInviteCode] = useState('');
+  const [generatingInvite, setGeneratingInvite] = useState(false);
 
   useEffect(() => {
     (async () => {
       try {
         const res = await fetch('/api/admin/overview');
-        if (!res.ok) throw new Error('Failed to load admin overview');
+        if (!res.ok) {
+          const errorData = await res.json().catch(() => ({}));
+          throw new Error(`Failed to load admin overview: ${res.status} - ${errorData.error || 'Unknown error'}`);
+        }
         const data = await res.json();
         setAccounts(data.users || []);
         setCreatedInvites(data.invites || []);
       } catch (err) {
         console.error('admin overview fetch error', err);
+        if (err instanceof Error && err.message.includes('401')) {
+          setAuthError(true);
+        }
       } finally {
         setLoading(false);
       }
     })();
   }, []);
 
-  return (
-    <div className="glass-card p-8 max-w-6xl mx-auto space-y-6">
-      <div>
-        <h1 className="text-3xl font-bold gradient-text mb-2">Admin Dashboard</h1>
-        <p className="text-sm text-gray-300">Manage users, invites, and system settings.</p>
-      </div>
+  const handleGenerateInvite = async () => {
+    setGeneratingInvite(true);
+    setNewInviteCode('');
+    
+    try {
+      const response = await fetch('/api/invite/generate', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ role: inviteRole }),
+      });
 
-      <div className="flex gap-4">
-        <GlassButton onClick={() => (window.location.href = '/admin/invites')}>Manage Invite Codes</GlassButton>
-      </div>
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}));
+        throw new Error(errorData.error || 'Failed to generate invite code');
+      }
+
+      const { invite } = await response.json();
+      setNewInviteCode(invite.code);
+      
+      // Refresh the invites list
+      const res = await fetch('/api/admin/overview');
+      if (res.ok) {
+        const data = await res.json();
+        setCreatedInvites(data.invites || []);
+      }
+    } catch (err) {
+      console.error('Generate invite error:', err);
+      alert(err instanceof Error ? err.message : 'Failed to generate invite code');
+    } finally {
+      setGeneratingInvite(false);
+    }
+  };
+
+  return (
+    <>
+      {/* Dashboard Header */}
+      <header className="glass-card p-6 mb-8 max-w-6xl mx-auto">
+        <h1 className="text-3xl font-bold gradient-text">Admin Dashboard</h1>
+      </header>
+
+      {/* Dashboard Content */}
+      <div className="glass-card p-8 max-w-6xl mx-auto space-y-6">
+        <div>
+          <p className="text-sm text-gray-300">Manage users, invites, and system settings.</p>
+        </div>
+
+      {authError ? (
+        <div className="glass-card p-6 bg-yellow-500/10 border border-yellow-500/30">
+          <h3 className="text-lg font-semibold text-yellow-400 mb-2">Access Restricted</h3>
+          <p className="text-yellow-200">You don't have admin privileges to view this dashboard.</p>
+          <p className="text-sm text-yellow-300 mt-2">This is a known issue that will be resolved in a future update.</p>
+        </div>
+      ) : (
+        <>
+          {/* Invite Code Generation */}
+          <div className="glass-card p-6">
+            <h2 className="text-xl font-semibold mb-4">Generate Invite Codes</h2>
+            <div className="space-y-4">
+              <div>
+                <label htmlFor="inviteRole" className="block text-sm font-medium mb-2 opacity-90">
+                  Role to Grant
+                </label>
+                <select
+                  id="inviteRole"
+                  value={inviteRole}
+                  onChange={(e) => setInviteRole(e.target.value as 'LABEL' | 'ADMIN')}
+                  className="w-full p-3 bg-[var(--color-glass-dark)] backdrop-blur-sm border border-white/10 rounded-xl text-white focus:border-[var(--color-accent)] focus:ring-2 focus:ring-[var(--color-glow)] focus:outline-none transition-all"
+                >
+                  <option value="LABEL">Label</option>
+                  <option value="ADMIN">Admin</option>
+                </select>
+              </div>
+              <div className="flex gap-2">
+                <GlassButton 
+                  onClick={handleGenerateInvite} 
+                  disabled={generatingInvite}
+                >
+                  {generatingInvite ? 'Generating...' : 'Generate Code'}
+                </GlassButton>
+                {newInviteCode && (
+                  <button
+                    className="px-3 py-2 bg-white/10 rounded-md text-sm hover:bg-white/20 transition-colors"
+                    onClick={async () => {
+                      try {
+                        await navigator.clipboard.writeText(newInviteCode);
+                        alert('Copied!');
+                      } catch (e) {
+                        alert('Copy failed');
+                      }
+                    }}
+                  >
+                    Copy
+                  </button>
+                )}
+              </div>
+              {newInviteCode && (
+                <div className="p-3 bg-green-500/10 border border-green-500/30 rounded-md">
+                  <p className="text-green-400">Generated Code: <span className="font-mono font-bold">{newInviteCode}</span></p>
+                </div>
+              )}
+            </div>
+          </div>
+        </>
+      )}
 
       <div>
         <h2 className="text-xl font-semibold mb-3">Active Accounts</h2>
@@ -194,5 +199,6 @@ function AdminDashboard() {
         )}
       </div>
     </div>
+    </>
   );
 }

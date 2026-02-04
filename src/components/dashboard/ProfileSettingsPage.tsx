@@ -18,6 +18,9 @@ export default function ProfileSettingsPage({ userRole }: ProfileSettingsPagePro
   const [newUsername, setNewUsername] = useState('');
   const [currentUsername, setCurrentUsername] = useState('');
   const [usernameError, setUsernameError] = useState<string | null>(null);
+  const [upgradeCode, setUpgradeCode] = useState('');
+  const [upgradingRole, setUpgradingRole] = useState(false);
+  const [upgradeError, setUpgradeError] = useState<string | null>(null);
 
   useEffect(() => {
     const getCurrentUser = async () => {
@@ -73,6 +76,49 @@ export default function ProfileSettingsPage({ userRole }: ProfileSettingsPagePro
       setUsernameError(error.message || 'Failed to update username');
     } finally {
       setIsChangingUsername(false);
+    }
+  };
+
+  const handleRoleUpgrade = async () => {
+    if (!upgradeCode.trim()) return;
+    
+    setUpgradingRole(true);
+    setUpgradeError(null);
+    
+    try {
+      // Get current user
+      const { data: { user } } = await supabaseClient.auth.getUser();
+      if (!user) return;
+
+      // Upgrade role via API
+      const response = await fetch('/api/profiles/upgrade-role', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          userId: user.id,
+          code: upgradeCode.trim()
+        }),
+      });
+
+      const result = await response.json();
+
+      if (!response.ok) {
+        throw new Error(result.error || 'Invalid invite code');
+      }
+
+      // Success - redirect to appropriate dashboard
+      alert('Role upgraded successfully! Redirecting to your new dashboard...');
+      
+      // Small delay before redirect
+      setTimeout(() => {
+        window.location.href = result.redirectUrl || '/dashboard/artist';
+      }, 1500);
+      
+    } catch (error: any) {
+      console.error('Role upgrade error:', error);
+      setUpgradeError(error.message || 'Failed to upgrade role');
+    } finally {
+      setUpgradingRole(false);
     }
   };
 
@@ -215,6 +261,53 @@ export default function ProfileSettingsPage({ userRole }: ProfileSettingsPagePro
               >
                 {isChangingUsername ? 'Updating Username...' : 'Update Username'}
               </motion.button>
+            </div>
+          </div>
+
+          {/* Permissions */}
+          <div className="glass-card p-6">
+            <h3 className="text-lg font-semibold text-white mb-4">Permissions</h3>
+            
+            <div className="space-y-4">
+              <div>
+                <p className="text-white/60 text-sm mb-3">Current Role</p>
+                <div className="px-3 py-2 rounded-lg bg-white/10 border border-white/20 text-white font-medium">
+                  {userRole.charAt(0) + userRole.slice(1).toLowerCase()}
+                </div>
+              </div>
+
+              {userRole === 'ARTIST' && (
+                <div>
+                  <p className="text-white/60 text-sm mb-3">Upgrade Permissions</p>
+                  <div className="p-3 bg-violet-500/10 border border-violet-500/30 rounded-lg mb-3">
+                    <p className="text-violet-200 text-xs">
+                      Enter an invite code to upgrade your account permissions
+                    </p>
+                  </div>
+                  <div className="space-y-3">
+                    <input
+                      type="text"
+                      value={upgradeCode}
+                      onChange={(e) => setUpgradeCode(e.target.value.toUpperCase().replace(/\s/g, ''))}
+                      placeholder="Enter invite code"
+                      className="w-full px-4 py-3 rounded-xl bg-white/10 border border-white/10 text-white placeholder-white/40 focus:border-violet-500 focus:ring-2 focus:ring-violet-500/20 focus:outline-none transition-all"
+                      disabled={upgradingRole}
+                    />
+                    {upgradeError && (
+                      <p className="text-red-400 text-sm">{upgradeError}</p>
+                    )}
+                    <motion.button
+                      className="w-full glass-btn"
+                      whileHover={{ scale: 1.02 }}
+                      whileTap={{ scale: 0.98 }}
+                      onClick={handleRoleUpgrade}
+                      disabled={upgradingRole || !upgradeCode.trim()}
+                    >
+                      {upgradingRole ? 'Upgrading...' : 'Upgrade Permissions'}
+                    </motion.button>
+                  </div>
+                </div>
+              )}
             </div>
           </div>
 
