@@ -5,6 +5,8 @@ import { useState, useEffect, useCallback } from 'react';
 import { supabaseClient } from '@/lib/supabase/client';
 import { useRouter } from 'next/navigation';
 import GlassButton from '@/components/ui/GlassButton';
+import Spinner from '@/components/ui/Spinner';
+import AuthBackground from '@/components/auth/AuthBackground';
 import Link from 'next/link';
 
 export default function Signup() {
@@ -220,11 +222,17 @@ export default function Signup() {
   };
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-gray-900 via-black to-gray-900 text-white p-4">
-      <div className="glass-card w-full max-w-md hover-glow">
-        <h1 className="text-3xl font-bold mb-8 text-center gradient-text">
-          Join SplitSheet Pro
-        </h1>
+    <AuthBackground>
+      <div className="w-full max-w-md">
+        <div className="glass-card p-8 hover-glow">
+          <div className="text-center mb-8">
+            <div className="w-24 h-24 mx-auto mb-6 bg-gradient-to-br from-violet-600 via-purple-600 to-indigo-600 rounded-2xl flex items-center justify-center shadow-2xl">
+              <span className="text-4xl">🎵</span>
+            </div>
+            <h1 className="text-3xl font-bold gradient-text">
+              Join SplitSheet Pro
+            </h1>
+          </div>
         <form onSubmit={handleSignup} className="space-y-6">
           <div>
             <label htmlFor="name" className="block text-sm font-medium mb-2 opacity-90">
@@ -299,9 +307,16 @@ export default function Signup() {
               disabled={loading}
             />
           </div>
-          {error && <p className="text-red-400 text-sm text-center animate-pulse-slow">{error}</p>}
+          {error && <p className="text-red-400 text-sm text-center">{error}</p>}
           <GlassButton type="submit" className="w-full" disabled={loading}>
-            {loading ? 'Creating Account...' : 'Sign Up'}
+            {loading ? (
+              <div className="flex items-center justify-center gap-2">
+                <Spinner size="sm" />
+                <span>Creating Account...</span>
+              </div>
+            ) : (
+              'Sign Up'
+            )}
           </GlassButton>
         </form>
         <p className="mt-6 text-center text-sm text-gray-400">
@@ -310,7 +325,8 @@ export default function Signup() {
             Log in
           </Link>
         </p>
+        </div>
       </div>
-    </div>
+    </AuthBackground>
   );
 }

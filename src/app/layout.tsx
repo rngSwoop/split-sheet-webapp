@@ -1,7 +1,5 @@
 import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
-import { LoadingProvider } from "@/contexts/LoadingContext";
-import GlobalLoadingOverlay from "@/components/ui/GlobalLoadingOverlay";
 import "./globals.css";
 
 const geistSans = Geist({
@@ -29,10 +27,7 @@ export default function RootLayout({
       <body
         className={`${geistSans.variable} ${geistMono.variable} antialiased`}
       >
-        <LoadingProvider>
-          {children}
-          <GlobalLoadingOverlay />
-        </LoadingProvider>
+        {children}
       </body>
     </html>
   );

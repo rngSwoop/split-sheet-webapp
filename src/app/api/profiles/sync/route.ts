@@ -1,6 +1,7 @@
 // src/app/api/profiles/sync/route.ts
 import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
+import { createClient } from '@supabase/supabase-js';
 
 // Helper function to generate username from user metadata
 function generateUsernameFromMetadata(email: string, name?: string): string {
@@ -21,6 +22,13 @@ function generateUsernameFromMetadata(email: string, name?: string): string {
 export async function POST(request: Request) {
   try {
     const { supabaseUserId, email, name, username } = await request.json();
+
+    // Initialize Supabase client for user_metadata updates
+    // Use publishable key with user session instead of service role for security
+    const supabase = createClient(
+      process.env.NEXT_PUBLIC_SUPABASE_URL!,
+      process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY!
+    );
 
     // 1. Check if Prisma User exists
     let prismaUser = await prisma.user.findUnique({
@@ -61,7 +69,33 @@ export async function POST(request: Request) {
           data: { role: prismaUser.role },
         });
       }
-      return NextResponse.json({ profile }, { status: 200 });
+
+// Store role in user_metadata for caching
+    try {
+      // Check if service role key is available
+      if (!process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_SERVICE_ROLE_KEY === 'sb_service_role_KEY_HERE') {
+        console.warn('⚠️ SUPABASE_SERVICE_ROLE_KEY not configured, skipping metadata caching');
+        // Continue without metadata caching
+      } else {
+        const supabaseAdmin = createClient(
+          process.env.NEXT_PUBLIC_SUPABASE_URL!,
+          process.env.SUPABASE_SERVICE_ROLE_KEY!
+        );
+        
+        await supabaseAdmin.auth.admin.updateUserById(supabaseUserId, {
+          user_metadata: { 
+            role: prismaUser.role,
+            username: prismaUser.username 
+          }
+        });
+        console.log('✅ Role cached in user_metadata:', prismaUser.role);
+      }
+    } catch (metadataError) {
+      console.warn('⚠️ Failed to cache role in user_metadata:', metadataError);
+      // Don't fail sync if metadata update fails
+    }
+
+    return NextResponse.json({ profile }, { status: 200 });
     }
 
     // 3. Create Profile with user's role for consistency
@@ -72,6 +106,31 @@ export async function POST(request: Request) {
         role: prismaUser.role,
       },
     });
+
+// Store role in user_metadata for caching
+    try {
+      // Check if service role key is available
+      if (!process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_SERVICE_ROLE_KEY === 'sb_service_role_KEY_HERE') {
+        console.warn('⚠️ SUPABASE_SERVICE_ROLE_KEY not configured, skipping metadata caching');
+        // Continue without metadata caching
+      } else {
+        const supabaseAdmin = createClient(
+          process.env.NEXT_PUBLIC_SUPABASE_URL!,
+          process.env.SUPABASE_SERVICE_ROLE_KEY!
+        );
+        
+        await supabaseAdmin.auth.admin.updateUserById(supabaseUserId, {
+          user_metadata: { 
+            role: prismaUser.role,
+            username: prismaUser.username 
+          }
+        });
+        console.log('✅ Role cached in user_metadata:', prismaUser.role);
+      }
+    } catch (metadataError) {
+      console.warn('⚠️ Failed to cache role in user_metadata:', metadataError);
+      // Don't fail sync if metadata update fails
+    }
 
     return NextResponse.json({ profile: newProfile }, { status: 201 });
   } catch (error) {

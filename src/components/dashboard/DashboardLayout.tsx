@@ -2,11 +2,11 @@
 
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { motion } from 'framer-motion';
 import Sidebar from './Sidebar';
 import ProfileSettingsPage from './ProfileSettingsPage';
+import UniversalBackground from '@/components/ui/UniversalBackground';
 import { supabaseClient } from '@/lib/supabase/client';
-import { useLoading } from '@/contexts/LoadingContext';
+import { getCurrentUserRoleClient } from '@/lib/auth-client';
 
 interface DashboardLayoutProps {
   children: React.ReactNode;
@@ -17,7 +17,6 @@ export default function DashboardLayout({ children, currentPage = 'dashboard' }:
   const [userRole, setUserRole] = useState<'ARTIST' | 'LABEL' | 'ADMIN'>('ARTIST');
   const [loading, setLoading] = useState(true);
   const [currentView, setCurrentView] = useState<'dashboard' | 'profile'>('dashboard');
-  const loadingContext = useLoading();
   const router = useRouter();
 
   useEffect(() => {
@@ -25,10 +24,7 @@ export default function DashboardLayout({ children, currentPage = 'dashboard' }:
     
     const getUserRole = async () => {
       try {
-        console.log('🔄 DashboardLayout: Starting user role check');
-        
-        // Set loading state with consistent message
-        loadingContext.ensureLoading('Authenticating');
+        console.log('🔄 DashboardLayout: Starting optimized user role check');
         
         const { data: { user } } = await supabaseClient.auth.getUser();
         
@@ -38,38 +34,23 @@ export default function DashboardLayout({ children, currentPage = 'dashboard' }:
           return;
         }
 
-        // Get user role from our API with timeout
-        const controller = new AbortController();
-        const timeoutId = setTimeout(() => controller.abort(), 10000); // 10 second timeout
+        // Use optimized client auth helper (fast path with caching)
+        const role = await getCurrentUserRoleClient();
         
-        const response = await fetch('/api/profiles/get-role', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ userId: user.id }),
-          signal: controller.signal,
-        });
-        
-        clearTimeout(timeoutId);
-
-        if (response.ok) {
-          const { role } = await response.json();
-          if (isMounted) {
-            setUserRole(role);
-            console.log('✅ DashboardLayout: User role loaded successfully:', role);
-          }
-        } else {
-          console.error('Failed to get role:', response.status);
-          // Don't set fallback role - let the error propagate
+        if (isMounted) {
+          setUserRole(role);
+          console.log('✅ DashboardLayout: User role loaded successfully:', role);
         }
       } catch (error) {
         console.error('Error getting user role:', error);
-        // Don't set fallback role - let the error propagate
+        // Fallback to default role on error
+        if (isMounted) {
+          setUserRole('ARTIST');
+        }
       } finally {
         if (isMounted) {
           setLoading(false);
-          // Clear loading immediately - no delay needed since dashboard is ready
-          loadingContext.clearLoading();
-          console.log('✅ DashboardLayout: Loading cleared');
+          console.log('✅ DashboardLayout: Loading completed');
         }
       }
     };
@@ -81,7 +62,6 @@ export default function DashboardLayout({ children, currentPage = 'dashboard' }:
       if (isMounted && loading) {
         console.warn('⚠️ DashboardLayout: Safety timeout triggered, clearing loading state');
         setLoading(false);
-        loadingContext.clearLoading();
       }
     }, 15000); // 15 second safety timeout
 
@@ -107,32 +87,14 @@ export default function DashboardLayout({ children, currentPage = 'dashboard' }:
       window.removeEventListener('switchToDashboard', handleSwitchToDashboard);
       window.removeEventListener('switchToProfile', handleSwitchToProfile);
     };
-  }, [router]); // Removed loading context functions to prevent infinite loops
+  }, [router]);
 
   if (loading) {
-    return null; // Loading is handled by GlobalLoadingOverlay
+    return null; // Show nothing while loading - instant transition when ready
   }
 
   return (
-    <div className="relative min-h-screen text-white">
-      {/* Full viewport background with gradient and subtle texture - matching loading screen */}
-      <div className="fixed inset-0">
-        <div className="absolute inset-0 bg-gradient-to-br from-slate-900 via-purple-900/20 to-slate-900" />
-        <div className="absolute inset-0 bg-gradient-to-tr from-blue-900/10 via-transparent to-purple-900/10" />
-        
-        {/* Subtle texture pattern */}
-        <div 
-          className="absolute inset-0 opacity-[0.03]"
-          style={{
-            backgroundImage: `
-              linear-gradient(rgba(255,255,255,0.1) 1px, transparent 1px),
-              linear-gradient(90deg, rgba(255,255,255,0.1) 1px, transparent 1px)
-            `,
-            backgroundSize: '50px 50px'
-          }}
-        />
-      </div>
-      
+    <UniversalBackground type="dashboard">
       {/* Sidebar - positioned immediately to prevent jump */}
       <div className="fixed left-0 top-0 h-full z-40">
         <Sidebar userRole={userRole} currentPage={currentPage} currentView={currentView} />
@@ -143,24 +105,16 @@ export default function DashboardLayout({ children, currentPage = 'dashboard' }:
         <div className="container mx-auto px-6 pt-4 pb-6">
           {/* Dashboard or Profile Content */}
           {currentView === 'dashboard' ? (
-            <motion.div
-              initial={{ opacity: 0, y: 20 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ duration: 0.5, ease: "easeOut", delay: 0.2 }}
-            >
+            <div>
               {children}
-            </motion.div>
+            </div>
           ) : (
-            <motion.div
-              initial={{ opacity: 0, y: 20 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ duration: 0.5, ease: "easeOut", delay: 0.2 }}
-            >
+            <div>
               <ProfileSettingsPage userRole={userRole} />
-            </motion.div>
+            </div>
           )}
         </div>
       </main>
-    </div>
+    </UniversalBackground>
   );
 }
