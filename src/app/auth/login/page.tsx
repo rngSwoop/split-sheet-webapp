@@ -106,7 +106,7 @@ export default function Login() {
   return (
     <AuthBackground>
       <div className="w-full max-w-md">
-        <div className="glass-card p-8">
+        <div className="glass-card p-8 hover-glow">
           <div className="text-center mb-8">
             <div className="w-24 h-24 mx-auto mb-6 bg-gradient-to-br from-violet-600 via-purple-600 to-indigo-600 rounded-2xl flex items-center justify-center shadow-2xl">
               <span className="text-4xl">🎵</span>
@@ -127,6 +127,7 @@ export default function Login() {
               <input
                 id="identifier"
                 type="text"
+                autoFocus
                 value={identifier}
                 onChange={(e) => setIdentifier(e.target.value)}
                 className="w-full p-4 bg-[var(--color-glass-dark)] backdrop-blur-sm border border-white/10 rounded-xl text-white placeholder-gray-400 focus:border-[var(--color-accent)] focus:ring-2 focus:ring-[var(--color-glow)] focus:outline-none transition-all"

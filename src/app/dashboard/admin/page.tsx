@@ -12,6 +12,7 @@ export default function AdminDashboard() {
   const [inviteRole, setInviteRole] = useState<'LABEL' | 'ADMIN'>('LABEL');
   const [newInviteCode, setNewInviteCode] = useState('');
   const [generatingInvite, setGeneratingInvite] = useState(false);
+  const [deletingInviteId, setDeletingInviteId] = useState<string | null>(null);
 
   useEffect(() => {
     (async () => {
@@ -55,16 +56,54 @@ export default function AdminDashboard() {
       setNewInviteCode(invite.code);
       
       // Refresh the invites list
-      const res = await fetch('/api/admin/overview');
-      if (res.ok) {
-        const data = await res.json();
-        setCreatedInvites(data.invites || []);
-      }
+      await refreshInvites();
     } catch (err) {
       console.error('Generate invite error:', err);
       alert(err instanceof Error ? err.message : 'Failed to generate invite code');
     } finally {
       setGeneratingInvite(false);
+    }
+  };
+
+  const refreshInvites = async () => {
+    const res = await fetch('/api/admin/overview');
+    if (res.ok) {
+      const data = await res.json();
+      setCreatedInvites(data.invites || []);
+    }
+  };
+
+  const handleDeleteInvite = async (invite: any) => {
+    const wasUsed = !!invite.usedAt;
+    const userLabel = invite.usedByUser?.email || invite.usedBy || 'unknown user';
+
+    const confirmed = wasUsed
+      ? window.confirm(
+          `This invite was used by ${userLabel}. Deleting it will revert their role back to ARTIST.\n\nAre you sure?`
+        )
+      : window.confirm('Delete this unused invite code?');
+
+    if (!confirmed) return;
+
+    setDeletingInviteId(invite.id);
+    try {
+      const res = await fetch('/api/invite/delete', {
+        method: 'DELETE',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ inviteId: invite.id }),
+      });
+
+      if (!res.ok) {
+        const errorData = await res.json().catch(() => ({}));
+        throw new Error(errorData.error || 'Failed to delete invite');
+      }
+
+      await refreshInvites();
+    } catch (err) {
+      console.error('Delete invite error:', err);
+      alert(err instanceof Error ? err.message : 'Failed to delete invite');
+    } finally {
+      setDeletingInviteId(null);
     }
   };
 
@@ -178,20 +217,39 @@ export default function AdminDashboard() {
           <div className="grid gap-3">
             {createdInvites.length === 0 && <p className="text-sm text-gray-400">No invites created yet.</p>}
             {createdInvites.map((inv: any) => (
-              <div key={inv.id} className="p-3 bg-[var(--color-glass-dark)] rounded-md flex items-center justify-between">
-                <div>
+              <div key={inv.id} className="p-3 bg-[var(--color-glass-dark)] rounded-md flex items-center justify-between gap-3">
+                <div className="min-w-0">
                   <div className="font-mono">{inv.code}</div>
                   <div className="text-xs text-gray-400">Role: {inv.role} • Created: {new Date(inv.createdAt).toLocaleString()}</div>
                 </div>
-                <div className="text-right">
-                  {inv.usedAt ? (
-                    <div className="text-sm">
-                      Used by <span className="font-medium">{inv.usedByUser?.email || inv.usedBy}</span>
-                      <div className="text-xs text-gray-400">Role: {inv.usedByUser?.role || '—'} • Redeemed: {new Date(inv.usedAt).toLocaleString()}</div>
-                    </div>
-                  ) : (
-                    <div className="text-sm text-gray-400">Unused</div>
-                  )}
+                <div className="flex items-center gap-3">
+                  <div className="text-right">
+                    {inv.usedAt ? (
+                      <div className="text-sm">
+                        Used by <span className="font-medium">{inv.usedByUser?.email || inv.usedBy}</span>
+                        <div className="text-xs text-gray-400">Role: {inv.usedByUser?.role || '—'} • Redeemed: {new Date(inv.usedAt).toLocaleString()}</div>
+                      </div>
+                    ) : (
+                      <div className="text-sm text-gray-400">Unused</div>
+                    )}
+                  </div>
+                  <button
+                    onClick={() => handleDeleteInvite(inv)}
+                    disabled={deletingInviteId === inv.id}
+                    className="shrink-0 p-2 rounded-md text-red-400 hover:bg-red-500/20 hover:text-red-300 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                    title="Delete invite"
+                  >
+                    {deletingInviteId === inv.id ? (
+                      <svg className="w-4 h-4 animate-spin" viewBox="0 0 24 24" fill="none">
+                        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                        <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v4a4 4 0 00-4 4H4z" />
+                      </svg>
+                    ) : (
+                      <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                      </svg>
+                    )}
+                  </button>
                 </div>
               </div>
             ))}

@@ -18,31 +18,41 @@ export async function POST(request: Request) {
 
     console.log(`🔍 Admin investigating user: ${userId}`);
 
-    // Get comprehensive user data
-    const user = await prisma.user.findUnique({
-      where: { id: userId }
-    });
+    // Smart lookup: detect UUID vs email vs username
+    const input = userId.trim();
+    const isUUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(input);
+
+    let user;
+    if (isUUID) {
+      user = await prisma.user.findUnique({ where: { id: input } });
+    } else if (input.includes('@')) {
+      user = await prisma.user.findFirst({ where: { email: input } });
+    } else {
+      user = await prisma.user.findFirst({ where: { username: input } });
+    }
 
     if (!user) {
       return NextResponse.json({ error: 'User not found' }, { status: 404 });
     }
 
+    const resolvedUserId = user.id;
+
     // Get profile data
     const profile = await prisma.profile.findFirst({
-      where: { userId }
+      where: { userId: resolvedUserId }
     });
 
     // Check username availability
     const usernameCheck = user.username ? await prisma.user.findFirst({
-      where: { 
+      where: {
         username: user.username,
-        deletedAt: null 
+        deletedAt: null
       }
     }) : null;
 
     // Get deletion history
     const deletionJobs = await prisma.deletionJob.findMany({
-      where: { userId },
+      where: { userId: resolvedUserId },
       include: {
         steps: true
       },
@@ -77,26 +87,38 @@ export async function POST(request: Request) {
         startedAt: job.startedAt.toISOString(),
         completedAt: job.completedAt?.toISOString() || null,
         failureReason: job.failureReason,
-        stepCount: job.steps.length
+        stepCount: job.steps.length,
+        steps: job.steps.map(step => ({
+          id: step.id,
+          stepName: step.stepName,
+          status: step.status,
+          startedAt: step.startedAt?.toISOString() || null,
+          completedAt: step.completedAt?.toISOString() || null,
+          failureReason: step.failureReason,
+          retryCount: step.retryCount,
+          itemsProcessed: step.itemsProcessed,
+          totalItems: step.totalItems,
+          durationMs: step.durationMs,
+        }))
       }))
     };
 
     // Add auth status if requested
     if (includeAuth) {
       try {
-        const authUser = await supabaseAdmin.auth.admin.getUserById(userId);
+        const authUser = await supabaseAdmin.auth.admin.getUserById(resolvedUserId);
         investigationData.authStatus = {
           existsInAuth: !authUser.error,
           createdAt: authUser.data?.user?.created_at,
           lastSignIn: authUser.data?.user?.last_sign_in_at
         };
-        console.log(`🔐 Auth status for ${userId}:`, {
+        console.log(`🔐 Auth status for ${resolvedUserId}:`, {
           exists: investigationData.authStatus.existsInAuth,
           createdAt: investigationData.authStatus.createdAt,
           lastSignIn: investigationData.authStatus.lastSignIn
         });
       } catch (authError) {
-        console.error(`❌ Auth check failed for ${userId}:`, authError);
+        console.error(`❌ Auth check failed for ${resolvedUserId}:`, authError);
         investigationData.authStatus = {
           existsInAuth: false,
           error: authError instanceof Error ? authError.message : 'Unknown auth error'
@@ -109,10 +131,10 @@ export async function POST(request: Request) {
       try {
         const integrityIssues = [];
 
-        // Check for orphaned contributors
+        // Check for orphaned contributors for this user
         const orphanedContributors = await prisma.contributor.count({
           where: {
-            userId: null,
+            userId: resolvedUserId,
             user: {
               deletedAt: { not: null }
             }
@@ -127,10 +149,10 @@ export async function POST(request: Request) {
           });
         }
 
-        // Check for orphaned signatures
+        // Check for orphaned signatures for this user
         const orphanedSignatures = await prisma.signature.count({
           where: {
-            userId: null,
+            userId: resolvedUserId,
             user: {
               deletedAt: { not: null }
             }
@@ -146,13 +168,13 @@ export async function POST(request: Request) {
         }
 
         investigationData.integrityIssues = integrityIssues;
-        console.log(`🔍 Integrity check for ${userId}:`, {
+        console.log(`🔍 Integrity check for ${resolvedUserId}:`, {
           orphanedContributors,
           orphanedSignatures,
           totalIssues: integrityIssues.length
         });
       } catch (integrityError) {
-        console.error(`❌ Integrity check failed for ${userId}:`, integrityError);
+        console.error(`❌ Integrity check failed for ${resolvedUserId}:`, integrityError);
         investigationData.integrityIssues = [{
           type: 'integrity_check_failed',
           count: 1,
@@ -161,7 +183,7 @@ export async function POST(request: Request) {
       }
     }
 
-    console.log(`✅ Investigation completed for ${userId}`);
+    console.log(`✅ Investigation completed for ${resolvedUserId}`);
 
     return NextResponse.json(investigationData);
 

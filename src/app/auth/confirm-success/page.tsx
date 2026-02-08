@@ -18,6 +18,10 @@ export default function ConfirmSuccess() {
         password: localStorage.getItem('pendingPassword') || '',
       });
 
+      // Clean up stored credentials regardless of outcome
+      localStorage.removeItem('pendingEmail');
+      localStorage.removeItem('pendingPassword');
+
       if (!error) {
         // Get user role after login and route to appropriate dashboard
         const { data: { user } } = await supabaseClient.auth.getUser();
@@ -28,7 +32,7 @@ export default function ConfirmSuccess() {
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ userId: user.id }),
           });
-          
+
           if (roleResponse.ok) {
             const { role } = await roleResponse.json();
             router.push(getDashboardRoute(role));

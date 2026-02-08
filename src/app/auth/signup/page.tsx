@@ -208,6 +208,16 @@ export default function Signup() {
 
     setLoading(false);
 
+    if (data.session) {
+      // Email verification disabled — user is already authenticated, go straight to dashboard
+      router.push('/dashboard');
+      return;
+    }
+
+    // Email verification enabled — store credentials for confirm-success auto-login
+    localStorage.setItem('pendingEmail', email);
+    localStorage.setItem('pendingPassword', password);
+
     // Clear form and reset states
     setName('');
     setUsername('');
@@ -216,7 +226,7 @@ export default function Signup() {
     setError(null);
     setUsernameAvailable(null);
     setUsernameError(null);
-    
+
     alert('Signup successful! Please check your email to confirm your account.');
     router.push('/auth/login');
   };
@@ -241,6 +251,7 @@ export default function Signup() {
             <input
               id="name"
               type="text"
+              autoFocus
               value={name}
               onChange={(e) => setName(e.target.value)}
               className="w-full p-4 bg-[var(--color-glass-dark)] backdrop-blur-sm border border-white/10 rounded-xl text-white placeholder-gray-400 focus:border-[var(--color-accent)] focus:ring-2 focus:ring-[var(--color-glow)] focus:outline-none transition-all"

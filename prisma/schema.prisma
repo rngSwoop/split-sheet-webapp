@@ -31,10 +31,11 @@ model User {
   deletionRequestOrigin   String?      @map("deletion_request_origin") // "USER_REQUEST" | "ADMIN_ACTION" | "INACTIVITY"
 
   // Relations
-  profiles     Profile[]
-  contributors Contributor[]
-  signatures   Signature[]  // Added: Users can sign split sheets
-  deletionJobs DeletionJob[]  // Added: Track deletion jobs for this user
+  profiles      Profile[]
+  contributors  Contributor[]
+  signatures    Signature[]  // Added: Users can sign split sheets
+  deletionJobs  DeletionJob[]  // Added: Track deletion jobs for this user
+  notifications Notification[]
 }
 
 enum Role {
@@ -42,6 +43,12 @@ enum Role {
   LABEL
   ADMIN
   DELETED
+}
+
+enum NotificationType {
+  SPLIT_INVITE
+  SPLIT_UPDATED
+  GENERAL
 }
 
 // Deletion job status tracking
@@ -112,6 +119,7 @@ model SplitSheet {
   contributors       Contributor[]
   signatures         Signature[]  // Added: E-signatures for binding agreement
   auditLogs          AuditLog[]
+  notifications      Notification[]
 }
 
 model Label {
@@ -191,6 +199,23 @@ model InviteCode {
   usedAt    DateTime?
 
   // Optional: Link to creator if you add admin relations later
+}
+
+model Notification {
+  id           String           @id @default(uuid())
+  userId       String
+  type         NotificationType
+  title        String
+  message      String
+  splitSheetId String?
+  read         Boolean          @default(false)
+  createdAt    DateTime         @default(now())
+
+  user       User        @relation(fields: [userId], references: [id])
+  splitSheet SplitSheet? @relation(fields: [splitSheetId], references: [id])
+
+  @@index([userId, read])
+  @@index([userId, createdAt])
 }
 
 // 🆕 Data Retention Policy Configuration

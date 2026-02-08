@@ -2,17 +2,18 @@
 
 import { useState, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { 
-  Home, 
-  FileText, 
-  Music, 
-  BarChart3, 
+import {
+  Home,
+  FileText,
+  Music,
+  BarChart3,
   Settings,
   Users,
   Package,
   TrendingUp,
   Shield,
   Ticket,
+  Search,
   Menu,
   X
 } from 'lucide-react';
@@ -56,6 +57,7 @@ export default function Sidebar({ userRole, currentPage = 'dashboard', currentVi
     ADMIN: [
       { id: 'users', label: 'Users', icon: Users, href: '/dashboard/admin' },
       { id: 'overview', label: 'System Overview', icon: BarChart3, href: '/admin/overview' },
+      { id: 'investigation', label: 'Investigate', icon: Search, href: '/dashboard/admin/investigation' },
       { id: 'admin-tools', label: 'Admin Tools', icon: Shield, href: '/admin/tools' },
       { id: 'invite-codes', label: 'Invite Codes', icon: Ticket, href: '/admin/invites' },
       { id: 'analytics', label: 'Analytics', icon: TrendingUp, href: '/admin/analytics' },

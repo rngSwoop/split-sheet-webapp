@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import Sidebar from './Sidebar';
 import ProfileSettingsPage from './ProfileSettingsPage';
+import NotificationBell from './NotificationBell';
 import UniversalBackground from '@/components/ui/UniversalBackground';
 import { supabaseClient } from '@/lib/supabase/client';
 import { getCurrentUserRoleClient } from '@/lib/auth-client';
@@ -102,7 +103,10 @@ export default function DashboardLayout({ children, currentPage = 'dashboard' }:
       
       {/* Main Content Area - with consistent left margin */}
       <main className="relative z-10" style={{ marginLeft: '64px', minHeight: '100vh' }}>
-        <div className="container mx-auto px-6 pt-4 pb-6">
+        <div className="flex justify-end items-center px-6 pt-4">
+          <NotificationBell />
+        </div>
+        <div className="container mx-auto px-6 pt-2 pb-6">
           {/* Dashboard or Profile Content */}
           {currentView === 'dashboard' ? (
             <div>

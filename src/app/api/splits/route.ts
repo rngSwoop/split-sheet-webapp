@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { getCurrentUser } from '@/lib/auth';
+import { createBulkNotifications } from '@/lib/notifications';
 
 export async function GET(request: Request) {
   const currentUser = await getCurrentUser();
@@ -105,6 +106,22 @@ export async function POST(request: Request) {
       },
       include: { contributors: true },
     });
+
+    // Send notifications to linked contributors (not the creator)
+    const contributorsToNotify = split.contributors.filter(
+      (c) => c.userId && c.userId !== currentUser.id
+    );
+    if (contributorsToNotify.length > 0) {
+      await createBulkNotifications(
+        contributorsToNotify.map((c) => ({
+          userId: c.userId!,
+          type: 'SPLIT_INVITE' as const,
+          title: 'Split Sheet Invite',
+          message: `You've been added as a contributor to "${finalTitle}"`,
+          splitSheetId: split.id,
+        }))
+      );
+    }
 
     return NextResponse.json({ split });
   } catch (err) {

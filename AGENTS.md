@@ -11,6 +11,17 @@ This project uses a **hybrid WSL/Windows development environment**:
 - **Windows Environment**: Used for development server execution and testing (user in VS Code Windows terminal)
 - **File System**: Windows file system mounted in WSL at `/mnt/c/Users/`
 
+### **⚠️ RESTRICTED COMMANDS — DO NOT EXECUTE**
+Agents must **never** run the following commands. These are executed manually by the user in the Windows environment only:
+- `npm run dev`, `npm run build`, `npm run start` (dev server, builds)
+- `npm run db:push` / `npm run db:migrate` (database schema changes)
+- `npm run prisma:generate` (Prisma client generation)
+- Any `npx prisma` commands
+
+**Allowed**: `npm run lint` is safe to run from WSL.
+
+If a task requires running restricted commands, **instruct the user** to run them instead.
+
 ### **Development Workflow**
 1. **Code Changes**: Made through opencode in WSL environment
 2. **Build & Test**: Executed by user in Windows VS Code terminal
@@ -53,7 +64,7 @@ This project doesn't have explicit test scripts configured. Check with the user 
 ## Code Style Guidelines
 
 ### Project Overview
-- **Tech Stack**: Next.js 16.1.1, React 19, TypeScript, Prisma 7, PostgreSQL, Supabase Auth
+- **Tech Stack**: Next.js 16.1.6, React 19, TypeScript, Prisma 7, PostgreSQL, Supabase Auth
 - **Architecture**: App Router, Server Components, API Routes
 - **Styling**: Tailwind CSS v4 with custom glass morphism design
 - **Database**: PostgreSQL with Prisma ORM (client engine)
@@ -213,8 +224,8 @@ src/
 ```
 
 ### Development Workflow
-1. Always run `npm run lint` after making changes
-2. Run `npm run db:push` after Prisma schema changes
+1. **Do not run** `npm run`, `db:push`, `prisma:generate`, or any build/dev commands — instruct the user to run them
+2. After Prisma schema changes, remind the user to run `npm run db:push` and `npm run prisma:generate`
 3. Test API endpoints using proper authentication
 4. Follow Next.js App Router conventions for routing
 

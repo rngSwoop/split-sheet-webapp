@@ -550,7 +550,7 @@ async function processUserSoftDelete(userId: string): Promise<void> {
 
 async function processSupabaseDeletion(userId: string): Promise<void> {
   try {
-    await supabaseAdmin.auth.admin.deleteUser(userId, true);
+    await supabaseAdmin.auth.admin.deleteUser(userId);
   } catch (supabaseError) {
     console.error(`Supabase deletion failed for user ${userId}:`, supabaseError);
     // Don't fail the entire job for Supabase errors - continue processing
