@@ -53,7 +53,10 @@ export async function middleware(req: NextRequest) {
     // Fallback to database (slow path)
     console.log('🔄 Middleware: No cached role, querying database');
     const prismaUser = await prisma.user.findUnique({
-      where: { id: user!.id }, // Non-null assertion - this function is only called when user exists
+      where: { 
+        id: user!.id, // Non-null assertion - this function is only called when user exists
+        deletedAt: null  // 🆕 Exclude deleted users
+      },
       select: { role: true },
     });
 
@@ -83,12 +86,19 @@ export async function middleware(req: NextRequest) {
     return userRole;
   };
 
-  // Redirect generic /dashboard to role-specific dashboard
+// Redirect generic /dashboard to role-specific dashboard
   if (req.nextUrl.pathname === '/dashboard' || req.nextUrl.pathname === '/dashboard/') {
     if (user) {
-      const role = await getUserRoleOptimized();
-      if (role) {
-        const rolePath = role.toLowerCase();
+      const prismaUser = await prisma.user.findUnique({
+        where: { 
+          id: user.id,
+          deletedAt: null  // 🆕 Exclude deleted users
+        },
+        select: { role: true },
+      });
+
+      if (prismaUser) {
+        const rolePath = prismaUser.role.toLowerCase();
         return NextResponse.redirect(new URL(`/dashboard/${rolePath}`, req.url));
       }
       // Fallback to ARTIST if user not found

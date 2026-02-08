@@ -33,12 +33,16 @@ export async function getCurrentUser() {
   if (!user) return null;
 
   const prismaUser = await prisma.user.findUnique({
-    where: { id: user.id },
+    where: { 
+      id: user.id,
+      deletedAt: null  // 🆕 Exclude deleted users
+    },
     select: {
       id: true,
       email: true,
       role: true,
       name: true,
+      deletedAt: true,  // Include deletedAt for UI checks
     },
   });
 

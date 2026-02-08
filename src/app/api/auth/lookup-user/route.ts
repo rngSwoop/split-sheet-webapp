@@ -15,15 +15,21 @@ export async function POST(request: Request) {
     let user;
 
     if (isEmail) {
-      // Direct email lookup
-      user = await prisma.user.findUnique({
-        where: { email: identifier.toLowerCase() },
+      // Direct email lookup (excluding deleted users)
+      user = await prisma.user.findFirst({
+        where: { 
+          email: identifier.toLowerCase(),
+          deletedAt: null // Only check active users
+        },
         select: { email: true },
       });
     } else {
-      // Username lookup
-      user = await prisma.user.findUnique({
-        where: { username: identifier.toLowerCase() },
+      // Username lookup (excluding deleted users)
+      user = await prisma.user.findFirst({
+        where: { 
+          username: identifier.toLowerCase(),
+          deletedAt: null // Only check active users
+        },
         select: { email: true },
       });
     }

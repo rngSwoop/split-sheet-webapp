@@ -30,9 +30,12 @@ export async function POST(request: Request) {
       process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY!
     );
 
-    // 1. Check if Prisma User exists
-    let prismaUser = await prisma.user.findUnique({
-      where: { id: supabaseUserId },
+    // 1. Check if Prisma User exists (excluding deleted users)
+    let prismaUser = await prisma.user.findFirst({
+      where: { 
+        id: supabaseUserId,
+        deletedAt: null // Only sync active users
+      },
     });
 
     if (!prismaUser) {
@@ -56,9 +59,12 @@ export async function POST(request: Request) {
       });
     }
 
-    // 2. Check if Profile exists
-    let profile = await prisma.profile.findUnique({
-      where: { userId: prismaUser.id },
+    // 2. Check if Profile exists (excluding deleted profiles)
+    let profile = await prisma.profile.findFirst({
+      where: { 
+        userId: prismaUser.id,
+        deletedAt: null // Only sync active profiles
+      },
     });
 
     if (profile) {

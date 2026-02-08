@@ -22,16 +22,46 @@ model User {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
+  // Soft Delete & Compliance Fields
+  deletedAt             DateTime?    @map("deleted_at")           
+  anonymizedName         String?      @map("anonymized_name")     
+  deletedReason         String?      @map("deleted_reason")        
+  lastActiveAt          DateTime?     @map("last_active_at")       // For inactivity tracking
+  dataRetentionUntil     DateTime?     @map("data_retention_until")  
+  deletionRequestOrigin   String?      @map("deletion_request_origin") // "USER_REQUEST" | "ADMIN_ACTION" | "INACTIVITY"
+
   // Relations
   profiles     Profile[]
   contributors Contributor[]
   signatures   Signature[]  // Added: Users can sign split sheets
+  deletionJobs DeletionJob[]  // Added: Track deletion jobs for this user
 }
 
 enum Role {
   ARTIST
   LABEL
   ADMIN
+  DELETED
+}
+
+// Deletion job status tracking
+enum DeletionStatus {
+  PENDING
+  IN_PROGRESS
+  RETRYING
+  COMPLETED
+  FAILED
+  NEEDS_MANUAL_REVIEW
+  CANCELLED
+}
+
+// Individual step status tracking
+enum StepStatus {
+  PENDING
+  IN_PROGRESS
+  COMPLETED
+  FAILED
+  SKIPPED
 }
 
 model Profile {
@@ -42,6 +72,9 @@ model Profile {
   avatar String?
   role   Role? @default(ARTIST)  // Optional, but defaults to ARTIST
   labelId String?
+
+  // Soft delete field to mirror user deletion state
+  deletedAt DateTime? @map("deleted_at")  // Mirror user deletion state
 
   label  Label? @relation(fields: [labelId], references: [id])
 
@@ -99,7 +132,7 @@ enum Status {
 
 model Contributor {
   id              String   @id @default(uuid())
-  splitSheetId    String
+  splitSheetId String?  // Optional - can be unlinked during deletion
   userId          String?  // Optional link to registered user
   legalName       String   // Added: Full legal name (required for binding agreements)
   stageName       String?  // Added: Optional alias/stage name
@@ -113,7 +146,7 @@ model Contributor {
   contactPhone    String?  // Added
   address         String?  // Added: Mailing address for formal agreements
 
-  splitSheet      SplitSheet @relation(fields: [splitSheetId], references: [id])
+  splitSheet      SplitSheet? @relation(fields: [splitSheetId], references: [id])
   user            User?      @relation(fields: [userId], references: [id])
   signatures      Signature[]  // Added: Contributors sign the sheet
 }
@@ -136,7 +169,7 @@ model Signature {
 
 model AuditLog {
   id           String   @id @default(uuid())
-  splitSheetId String
+  splitSheetId String?
   action       String   // e.g., "CREATE", "SIGN", "REVERSE", "UPDATE_PERCENTAGE"
   performedBy  String?  // userId or admin name
   reason       String?
@@ -144,7 +177,7 @@ model AuditLog {
   oldValue     String?  // Added: JSON string of previous state for reversals
   newValue     String?  // Added: JSON string of new state
 
-  splitSheet   SplitSheet @relation(fields: [splitSheetId], references: [id])
+  splitSheet   SplitSheet? @relation(fields: [splitSheetId], references: [id])
 }
 
 model InviteCode {
@@ -158,4 +191,106 @@ model InviteCode {
   usedAt    DateTime?
 
   // Optional: Link to creator if you add admin relations later
+}
+
+// 🆕 Data Retention Policy Configuration
+model DataRetentionPolicy {
+  id            String   @id @default(uuid())
+  dataType      String   // "USER_PERSONAL", "SIGNATURES", "FINANCIAL_LOGS", "SPLIT_SHEETS"
+  retentionDays Int      // Days to retain after deletion/last activity
+  legalBasis    String   // "CONTRACT_BINDING", "COMPLIANCE", "BUSINESS_RECORD", "FINANCIAL_AUDIT"
+  isActive      Boolean  @default(true)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+}
+
+// 🔄 Enhanced Deletion Job Tracking Models
+model DeletionJob {
+  id                     String         @id @default(uuid())
+  jobId                  String         @unique  // Your existing job ID format: "job_timestamp_random"
+  userId                 String         // User being deleted
+  user                   User           @relation(fields: [userId], references: [id])
+  status                 DeletionStatus @default(PENDING)
+  currentBatch           Int            @default(0)
+  totalBatches           Int            @default(1)
+  retryCount             Int            @default(0)
+  startedAt              DateTime       @default(now())
+  completedAt            DateTime?
+  failureReason          String?
+  estimatedMinutesTotal  Int?           // Based on user's data size
+  cancellationRequestedAt DateTime?      // When user requested cancellation
+  
+  // Relations
+  steps                 DeletionJobStep[]
+  preservedContributors PreservedContributor[]
+  
+  // Indexes for performance
+  @@index([userId])
+  @@index([status])
+  @@index([jobId])
+  @@index([startedAt])
+}
+
+model DeletionJobStep {
+  id             String     @id @default(uuid())
+  deletionJobId  String
+  stepName       String     // "VALIDATE_USER", "DELETE_SIGNATURES", "DELETE_CONTRIBUTORS", etc.
+  status         StepStatus @default(PENDING)
+  startedAt      DateTime?
+  completedAt    DateTime?
+  failureReason  String?
+  retryCount     Int        @default(0)
+  itemsProcessed Int        @default(0)
+  totalItems     Int?
+  durationMs     Int?       // Step execution time in milliseconds
+  
+  // Relations
+  deletionJob    DeletionJob @relation(fields: [deletionJobId], references: [id])
+  
+  // Indexes for performance
+  @@index([deletionJobId])
+  @@index([status])
+  @@index([stepName])
+}
+
+
+
+
+
+
+
+model PreservedContributor {
+  id                    String   @id @default(uuid())
+  deletionJobId         String?  // Link to the deletion job that preserved this data
+  originalContributorId String   // Original contributor UUID
+  originalUserId        String   // User who originally owned this contributor
+  originalSplitSheetId  String?  // Track which split sheet this belonged to
+  legalName             String   // Full legal name for binding agreements
+  stageName             String?  // Optional alias/stage name
+  role                  String   // "Composer", "Lyricist", "Producer", etc.
+  percentage            Float    // Share percentage
+  proAffiliation        String?  // PRO like ASCAP, BMI, SESAC
+  ipiNumber             String?  // IPI/CAE number for PRO registration
+  publisher             String?  // Publishing entity (self or company)
+  publisherShare        Float?   // Often 50% default, but customizable
+  contactEmail          String?  // Contact info for legal notifications
+  contactPhone          String?  // Phone number for formal agreements
+  address               String?  // Mailing address for formal agreements
+  
+  // Compliance tracking
+  preservedAt           DateTime @default(now())
+  retentionUntil        DateTime? // Legal compliance tracking (90 days, etc.)
+  deletionReason        String?  // "USER_DELETED", "ACCOUNT_TRANSFER", etc.
+  legalHold             Boolean  @default(false) // For legal disputes
+  
+  // Relations
+  deletionJob           DeletionJob? @relation(fields: [deletionJobId], references: [id])
+  
+  // Indexes for performance and compliance queries
+  @@index([originalContributorId])
+  @@index([originalUserId])
+  @@index([preservedAt])
+  @@index([deletionJobId])
+  @@index([retentionUntil])
+  @@index([legalHold])
 }

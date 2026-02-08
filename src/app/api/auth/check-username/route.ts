@@ -43,9 +43,12 @@ export async function POST(request: Request) {
     
     const normalizedUsername = trimmedUsername.toLowerCase();
     
-    // Check if username exists in database
+    // Check if username exists in database (excluding deleted users)
     const existingUser = await prisma.user.findUnique({
-      where: { username: normalizedUsername }
+      where: { 
+        username: normalizedUsername,
+        deletedAt: null // Only check active users
+      }
     });
     
     return NextResponse.json({ 

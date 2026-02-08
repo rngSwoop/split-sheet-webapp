@@ -35,6 +35,7 @@ const roleSpecificItems = {
   ADMIN: [
     { id: 'users', label: 'Users', icon: '👥' },
     { id: 'overview', label: 'System Overview', icon: '📊' },
+    { id: 'investigation', label: 'Account Investigation', icon: '🔍' },
     { id: 'admin-tools', label: 'Admin Tools', icon: '🔧' },
     { id: 'invite-codes', label: 'Invite Codes', icon: '🎫' },
     { id: 'analytics', label: 'Analytics', icon: '📊' },
