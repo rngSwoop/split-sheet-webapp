@@ -7,7 +7,7 @@ import { cn } from '@/lib/utils';
 interface MobileMenuProps {
   isOpen: boolean;
   onClose: () => void;
-  userRole: 'ARTIST' | 'LABEL' | 'ADMIN';
+  userRole: 'ARTIST' | 'LABEL' | 'ADMIN' | 'PUBLISHER' | 'PRO';
   currentPage?: string;
 }
 
@@ -37,10 +37,21 @@ const roleSpecificItems = {
     { id: 'overview', label: 'System Overview', icon: '📊' },
     { id: 'investigation', label: 'Account Investigation', icon: '🔍' },
     { id: 'admin-tools', label: 'Admin Tools', icon: '🔧' },
+    { id: 'modify-splits', label: 'Modify Splits', icon: '📝' },
     { id: 'invite-codes', label: 'Invite Codes', icon: '🎫' },
     { id: 'analytics', label: 'Analytics', icon: '📊' },
     { id: 'settings', label: 'Settings', icon: '⚙️' },
-  ]
+  ],
+  PUBLISHER: [
+    { id: 'my-splits', label: 'Split Sheets', icon: '📝' },
+    { id: 'artists', label: 'Artists', icon: '👥' },
+    { id: 'settings', label: 'Settings', icon: '⚙️' },
+  ],
+  PRO: [
+    { id: 'my-splits', label: 'Split Sheets', icon: '📝' },
+    { id: 'artists', label: 'Artists', icon: '👥' },
+    { id: 'settings', label: 'Settings', icon: '⚙️' },
+  ],
 };
 
 export default function MobileMenu({ isOpen, onClose, userRole, currentPage = 'dashboard' }: MobileMenuProps) {

@@ -2,7 +2,9 @@
 // Client-side optimized auth utilities
 import { supabaseClient } from '@/lib/supabase/client';
 
-export async function getCurrentUserRoleClient(): Promise<'ARTIST' | 'LABEL' | 'ADMIN'> {
+export type UserRole = 'ARTIST' | 'LABEL' | 'ADMIN' | 'PUBLISHER' | 'PRO';
+
+export async function getCurrentUserRoleClient(): Promise<UserRole> {
   try {
     const { data: { user } } = await supabaseClient.auth.getUser();
     
@@ -14,7 +16,7 @@ export async function getCurrentUserRoleClient(): Promise<'ARTIST' | 'LABEL' | '
     const cachedRole = user.user_metadata?.role;
     if (cachedRole) {
       console.log('🎯 Client: Using cached role from user_metadata:', cachedRole);
-      return cachedRole as 'ARTIST' | 'LABEL' | 'ADMIN';
+      return cachedRole as UserRole;
     }
 
     // Fallback: fetch from API (slow path - should rarely happen)
@@ -27,7 +29,7 @@ export async function getCurrentUserRoleClient(): Promise<'ARTIST' | 'LABEL' | '
 
     if (response.ok) {
       const { role } = await response.json();
-      return role as 'ARTIST' | 'LABEL' | 'ADMIN';
+      return role as UserRole;
     }
 
     // Default fallback

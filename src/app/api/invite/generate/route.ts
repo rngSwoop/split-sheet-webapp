@@ -14,7 +14,7 @@ export async function POST(request: Request) {
   const roleStr = String(rawRole || '').toUpperCase();
 
   // Validate allowed roles and convert to Prisma Role type
-  if (roleStr !== 'LABEL' && roleStr !== 'ADMIN') {
+  if (!['LABEL', 'ADMIN', 'PUBLISHER', 'PRO'].includes(roleStr)) {
     return NextResponse.json({ error: 'Invalid role' }, { status: 400 });
   }
 

@@ -12,6 +12,10 @@ export function getDashboardRoute(role: string | null): string {
       return '/dashboard/admin';
     case 'label':
       return '/dashboard/label';
+    case 'publisher':
+      return '/dashboard/artist';
+    case 'pro':
+      return '/dashboard/artist';
     default:
       return '/dashboard/artist';
   }

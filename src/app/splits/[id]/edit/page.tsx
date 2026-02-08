@@ -1,12 +1,13 @@
-"use client";
+'use client';
 
-import { useState, useRef, useEffect } from 'react';
-import { useRouter } from 'next/navigation';
-import { Plus, HelpCircle } from 'lucide-react';
+import { useState, useRef, useEffect, useCallback } from 'react';
+import { useParams, useRouter } from 'next/navigation';
+import { Plus, HelpCircle, ArrowLeft } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import GlassButton from '@/components/ui/GlassButton';
 import ContributorCard, { ContributorFormState, createEmptyContributor } from '@/components/splits/ContributorCard';
 import PercentageSummary from '@/components/splits/PercentageSummary';
+import DashboardLayout from '@/components/dashboard/DashboardLayout';
 import { cn } from '@/lib/utils';
 
 function RequirementsTooltip({ reasons, label }: { reasons: string[]; label: string }) {
@@ -61,15 +62,76 @@ function RequirementsTooltip({ reasons, label }: { reasons: string[]; label: str
   );
 }
 
-export default function NewSplitPage() {
+export default function EditSplitPage() {
+  const params = useParams();
+  const router = useRouter();
+  const id = params.id as string;
+
   const [finalTitle, setFinalTitle] = useState('');
   const [workingTitle, setWorkingTitle] = useState('');
-  const [contributors, setContributors] = useState<ContributorFormState[]>([
-    createEmptyContributor(),
-  ]);
+  const [contributors, setContributors] = useState<ContributorFormState[]>([]);
+  const [originalStatus, setOriginalStatus] = useState('PENDING');
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
-  const router = useRouter();
+  const [fetching, setFetching] = useState(true);
+
+  const fetchSplit = useCallback(async () => {
+    try {
+      const res = await fetch(`/api/splits/${id}`);
+      if (!res.ok) {
+        router.replace(`/splits/${id}`);
+        return;
+      }
+      const data = await res.json();
+
+      // Redirect if user can't edit
+      if (!data.permissions.canAddRemoveContributors) {
+        router.replace(`/splits/${id}`);
+        return;
+      }
+
+      const split = data.split;
+      setFinalTitle(split.song.finalTitle || '');
+      setWorkingTitle(split.song.workingTitle || '');
+      setOriginalStatus(split.status);
+
+      // Map contributors to form state
+      const mapped: ContributorFormState[] = split.contributors.map((c: any) => ({
+        userId: c.userId || null,
+        legalName: c.legalName || '',
+        stageName: c.stageName || '',
+        contactPhone: c.contactPhone || '',
+        contactEmail: c.contactEmail || '',
+        address: c.address || '',
+        proAffiliation: c.proAffiliation || '',
+        proOrgId: c.proOrgId || null,
+        proOtherText: c.proOtherText || '',
+        hasPublisher: !!(c.publisherCompany || c.publisherId),
+        publisherCompany: c.publisherCompany || '',
+        publisherName: c.publisherName || '',
+        publisherContact: c.publisherContact || '',
+        publisherPhone: c.publisherPhone || '',
+        publisherEmail: c.publisherEmail || '',
+        publisherId: c.publisherId || null,
+        publisherShare: c.publisherShare ?? 0,
+        hasLabel: !!c.labelId,
+        labelId: c.labelId || null,
+        labelName: c.labelEntity?.name || '',
+        contributorType: 'WRITER' as const,
+        percentage: c.percentage || 0,
+      }));
+
+      setContributors(mapped);
+    } catch {
+      router.replace(`/splits/${id}`);
+    } finally {
+      setFetching(false);
+    }
+  }, [id, router]);
+
+  useEffect(() => {
+    fetchSplit();
+  }, [fetchSplit]);
 
   const writerTotal = contributors.reduce((s, c) => s + c.percentage, 0);
 
@@ -84,14 +146,15 @@ export default function NewSplitPage() {
   }
   const canFinalize = finalizeReasons.length === 0;
 
-  // Compute notify requirements
-  const notifyReasons: string[] = [];
-  if (!finalTitle.trim()) notifyReasons.push('Final title is required');
-  if (contributors.length === 0) notifyReasons.push('At least 1 co-writer is required');
+  // Compute save requirements
+  const saveReasons: string[] = [];
+  if (!finalTitle.trim()) saveReasons.push('Final title is required');
+  if (contributors.length === 0) saveReasons.push('At least 1 co-writer is required');
   if (contributors.some((c) => !c.userId)) {
-    notifyReasons.push('All co-writers must have a linked account');
+    saveReasons.push('All co-writers must have a linked account');
   }
-  const canNotify = notifyReasons.length === 0;
+  if (writerTotal !== 50) saveReasons.push(`Writer percentages must total 50% (currently ${writerTotal}%)`);
+  const canSave = saveReasons.length === 0;
 
   function updateContributor(idx: number, patch: Partial<ContributorFormState>) {
     setContributors((prev) => {
@@ -109,7 +172,7 @@ export default function NewSplitPage() {
     setContributors((prev) => prev.filter((_, i) => i !== idx));
   }
 
-  const handleSubmit = async (action: 'notify' | 'finalize') => {
+  const handleSubmit = async (action: 'save' | 'finalize') => {
     setError(null);
     setLoading(true);
 
@@ -126,7 +189,6 @@ export default function NewSplitPage() {
         return;
       }
 
-      // All co-writers must have a linked account
       const missingAccount = contributors.some((c) => !c.userId);
       if (missingAccount) {
         setError('All co-writers must have a linked account');
@@ -134,17 +196,16 @@ export default function NewSplitPage() {
         return;
       }
 
-      // Finalize path: full validation
+      if (writerTotal !== 50) {
+        setError('Writer percentages must total 50%');
+        setLoading(false);
+        return;
+      }
+
       if (action === 'finalize') {
         const missingName = contributors.some((c) => !c.legalName.trim());
         if (missingName) {
           setError('All co-writers must have a legal name');
-          setLoading(false);
-          return;
-        }
-
-        if (writerTotal !== 50) {
-          setError('Writer percentages must total 50%');
           setLoading(false);
           return;
         }
@@ -183,22 +244,22 @@ export default function NewSplitPage() {
         address: c.address || null,
       }));
 
-      const status = action === 'finalize' ? 'SIGNED' : 'PENDING';
+      const status = action === 'finalize' ? 'SIGNED' : originalStatus;
 
-      const res = await fetch('/api/splits', {
-        method: 'POST',
+      const res = await fetch(`/api/splits/${id}`, {
+        method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ finalTitle, workingTitle, contributors: payload, status }),
       });
 
       if (!res.ok) {
         const err = await res.json();
-        setError(err.error || 'Failed to create split');
+        setError(err.error || 'Failed to update split');
         setLoading(false);
         return;
       }
 
-      router.push('/dashboard/artist');
+      router.push(`/splits/${id}`);
     } catch (err: any) {
       setError(err.message);
     } finally {
@@ -211,10 +272,29 @@ export default function NewSplitPage() {
     'placeholder:text-white/20 focus:outline-none focus:border-violet-500/50'
   );
 
+  if (fetching) {
+    return (
+      <DashboardLayout currentPage="splits">
+        <div className="flex items-center justify-center min-h-[60vh]">
+          <div className="w-8 h-8 border-2 border-violet-400 border-t-transparent rounded-full animate-spin" />
+        </div>
+      </DashboardLayout>
+    );
+  }
+
   return (
-    <div className="min-h-screen bg-gradient-to-br from-gray-900 via-black to-gray-900 text-white p-6">
+    <DashboardLayout currentPage="splits">
       <div className="max-w-3xl mx-auto space-y-6">
-        <h1 className="text-2xl font-bold gradient-text">New Split Sheet</h1>
+        {/* Header */}
+        <div className="flex items-center gap-4">
+          <button
+            onClick={() => router.push(`/splits/${id}`)}
+            className="p-2 rounded-xl hover:bg-white/10 transition-colors"
+          >
+            <ArrowLeft className="w-5 h-5 text-white/70" />
+          </button>
+          <h1 className="text-2xl font-bold gradient-text">Edit Split Sheet</h1>
+        </div>
 
         <div className="space-y-6">
           {/* Song Title Section */}
@@ -283,12 +363,12 @@ export default function NewSplitPage() {
               <GlassButton
                 type="button"
                 className="flex-1"
-                disabled={loading || !canNotify}
-                onClick={() => handleSubmit('notify')}
+                disabled={loading || !canSave}
+                onClick={() => handleSubmit('save')}
               >
-                {loading ? 'Creating...' : 'Notify Contributing Parties'}
+                {loading ? 'Saving...' : 'Save Changes'}
               </GlassButton>
-              <RequirementsTooltip reasons={notifyReasons} label="Cannot notify yet:" />
+              <RequirementsTooltip reasons={saveReasons} label="Cannot save yet:" />
             </div>
             <div className="flex-1 flex items-center gap-1">
               <GlassButton
@@ -297,13 +377,13 @@ export default function NewSplitPage() {
                 disabled={loading || !canFinalize}
                 onClick={() => handleSubmit('finalize')}
               >
-                {loading ? 'Creating...' : 'Finalize Split Sheet'}
+                {loading ? 'Saving...' : 'Save & Finalize'}
               </GlassButton>
               <RequirementsTooltip reasons={finalizeReasons} label="Cannot finalize yet:" />
             </div>
           </div>
         </div>
       </div>
-    </div>
+    </DashboardLayout>
   );
 }

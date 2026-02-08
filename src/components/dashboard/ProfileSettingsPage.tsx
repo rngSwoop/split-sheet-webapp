@@ -7,7 +7,7 @@ import { cn } from '@/lib/utils';
 import { supabaseClient } from '@/lib/supabase/client';
 
 interface ProfileSettingsPageProps {
-  userRole: 'ARTIST' | 'LABEL' | 'ADMIN';
+  userRole: 'ARTIST' | 'LABEL' | 'ADMIN' | 'PUBLISHER' | 'PRO';
 }
 
 export default function ProfileSettingsPage({ userRole }: ProfileSettingsPageProps) {

@@ -111,7 +111,7 @@ export async function middleware(req: NextRequest) {
     const pathSegments = req.nextUrl.pathname.split('/');
     const requestedRole = pathSegments[2]?.toUpperCase(); // Extract role from /dashboard/role/...
     
-    if (user && requestedRole && ['ARTIST', 'LABEL', 'ADMIN'].includes(requestedRole)) {
+    if (user && requestedRole && ['ARTIST', 'LABEL', 'ADMIN', 'PUBLISHER', 'PRO'].includes(requestedRole)) {
       const role = await getUserRoleOptimized();
       if (role && role !== requestedRole) {
         // Redirect to correct dashboard if accessing wrong role

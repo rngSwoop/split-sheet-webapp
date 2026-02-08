@@ -42,12 +42,22 @@ enum Role {
   ARTIST
   LABEL
   ADMIN
+  PUBLISHER
+  PRO
   DELETED
+}
+
+enum ContributorType {
+  WRITER
+  PRODUCER
 }
 
 enum NotificationType {
   SPLIT_INVITE
   SPLIT_UPDATED
+  SPLIT_FINALIZED
+  SPLIT_DISPUTED
+  SPLIT_READY
   GENERAL
 }
 
@@ -79,11 +89,15 @@ model Profile {
   avatar String?
   role   Role? @default(ARTIST)  // Optional, but defaults to ARTIST
   labelId String?
+  publisherId String?
+  proOrgId    String?
 
   // Soft delete field to mirror user deletion state
   deletedAt DateTime? @map("deleted_at")  // Mirror user deletion state
 
-  label  Label? @relation(fields: [labelId], references: [id])
+  label     Label?                @relation(fields: [labelId], references: [id])
+  publisher Publisher?            @relation(fields: [publisherId], references: [id])
+  proOrg    PerformanceRightsOrg? @relation(fields: [proOrgId], references: [id])
 
   user   User   @relation(fields: [userId], references: [id])
 }
@@ -114,6 +128,7 @@ model SplitSheet {
   publishedAt        DateTime?
   reversedAt         DateTime?  // Added: Timestamp for reversals
   reversalReason     String?    // Added: Required for legal audit of reversals
+  disputedBy         String?    // userId of contributor who disputed
 
   song               Song       @relation(fields: [songId], references: [id])
   contributors       Contributor[]
@@ -127,7 +142,29 @@ model Label {
   name      String
   createdAt DateTime @default(now())
 
-  profiles  Profile[]
+  profiles     Profile[]
+  contributors Contributor[]
+}
+
+model Publisher {
+  id        String   @id @default(uuid())
+  name      String
+  contact   String?
+  phone     String?
+  email     String?
+  createdAt DateTime @default(now())
+
+  profiles     Profile[]
+  contributors Contributor[]
+}
+
+model PerformanceRightsOrg {
+  id        String   @id @default(uuid())
+  name      String   @unique
+  createdAt DateTime @default(now())
+
+  profiles     Profile[]
+  contributors Contributor[]
 }
 
 enum Status {
@@ -136,27 +173,39 @@ enum Status {
   SIGNED
   PUBLISHED
   REVERSED
+  DISPUTED
 }
 
 model Contributor {
-  id              String   @id @default(uuid())
-  splitSheetId String?  // Optional - can be unlinked during deletion
-  userId          String?  // Optional link to registered user
-  legalName       String   // Added: Full legal name (required for binding agreements)
-  stageName       String?  // Added: Optional alias/stage name
-  role            String   // e.g., "Composer", "Lyricist", "Producer"
-  percentage      Float
-  proAffiliation  String?  // Added: PRO like ASCAP, BMI, SESAC
-  ipiNumber       String?  // Added: IPI/CAE number for PRO registration
-  publisher       String?  // Added: Publishing entity (self or company)
-  publisherShare  Float?   // Added: Often 50% default, but customizable
-  contactEmail    String?  // Added: Contact info for legal notifications
-  contactPhone    String?  // Added
-  address         String?  // Added: Mailing address for formal agreements
+  id               String          @id @default(uuid())
+  splitSheetId     String?         // Optional - can be unlinked during deletion
+  userId           String?         // Optional link to registered user
+  legalName        String          // Full legal name (required for binding agreements)
+  stageName        String?         // Optional alias/stage name
+  role             String          // e.g., "Composer", "Lyricist", "Producer"
+  contributorType  ContributorType @default(WRITER)
+  percentage       Float
+  proAffiliation   String?         // PRO like ASCAP, BMI, SESAC
+  proOrgId         String?         // FK to PerformanceRightsOrg
+  proOtherText     String?         // free text when PRO = "Other"
+  publisherCompany String?         // replaces old `publisher`
+  publisherName    String?
+  publisherContact String?
+  publisherPhone   String?
+  publisherEmail   String?
+  publisherId      String?         // FK to Publisher entity
+  publisherShare   Float?          // Often 50% default, but customizable
+  labelId          String?         // FK to Label entity
+  contactEmail     String?         // Contact info for legal notifications
+  contactPhone     String?
+  address          String?         // Mailing address for formal agreements
 
-  splitSheet      SplitSheet? @relation(fields: [splitSheetId], references: [id])
-  user            User?      @relation(fields: [userId], references: [id])
-  signatures      Signature[]  // Added: Contributors sign the sheet
+  splitSheet      SplitSheet?           @relation(fields: [splitSheetId], references: [id])
+  user            User?                 @relation(fields: [userId], references: [id])
+  publisherEntity Publisher?            @relation(fields: [publisherId], references: [id])
+  proOrg          PerformanceRightsOrg? @relation(fields: [proOrgId], references: [id])
+  labelEntity     Label?                @relation(fields: [labelId], references: [id])
+  signatures      Signature[]
 }
 
 model Signature {
@@ -285,22 +334,29 @@ model DeletionJobStep {
 
 
 model PreservedContributor {
-  id                    String   @id @default(uuid())
-  deletionJobId         String?  // Link to the deletion job that preserved this data
-  originalContributorId String   // Original contributor UUID
-  originalUserId        String   // User who originally owned this contributor
-  originalSplitSheetId  String?  // Track which split sheet this belonged to
-  legalName             String   // Full legal name for binding agreements
-  stageName             String?  // Optional alias/stage name
-  role                  String   // "Composer", "Lyricist", "Producer", etc.
-  percentage            Float    // Share percentage
-  proAffiliation        String?  // PRO like ASCAP, BMI, SESAC
-  ipiNumber             String?  // IPI/CAE number for PRO registration
-  publisher             String?  // Publishing entity (self or company)
-  publisherShare        Float?   // Often 50% default, but customizable
-  contactEmail          String?  // Contact info for legal notifications
-  contactPhone          String?  // Phone number for formal agreements
-  address               String?  // Mailing address for formal agreements
+  id                    String          @id @default(uuid())
+  deletionJobId         String?         // Link to the deletion job that preserved this data
+  originalContributorId String          // Original contributor UUID
+  originalUserId        String          // User who originally owned this contributor
+  originalSplitSheetId  String?         // Track which split sheet this belonged to
+  legalName             String          // Full legal name for binding agreements
+  stageName             String?         // Optional alias/stage name
+  role                  String          // "Composer", "Lyricist", "Producer", etc.
+  contributorType       ContributorType @default(WRITER)
+  percentage            Float           // Share percentage
+  proAffiliation        String?         // PRO like ASCAP, BMI, SESAC
+  proOrgId              String?         // FK to PerformanceRightsOrg
+  proOtherText          String?         // free text when PRO = "Other"
+  publisherCompany      String?         // Publishing company name
+  publisherName         String?
+  publisherContact      String?
+  publisherPhone        String?
+  publisherEmail        String?
+  publisherId           String?         // FK to Publisher entity
+  publisherShare        Float?          // Often 50% default, but customizable
+  contactEmail          String?         // Contact info for legal notifications
+  contactPhone          String?         // Phone number for formal agreements
+  address               String?         // Mailing address for formal agreements
   
   // Compliance tracking
   preservedAt           DateTime @default(now())

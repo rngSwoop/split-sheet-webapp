@@ -23,7 +23,7 @@ import ProfileSection from './Sidebar/ProfileSection';
 import MobileMenu from './Sidebar/MobileMenu';
 
 interface SidebarProps {
-  userRole: 'ARTIST' | 'LABEL' | 'ADMIN';
+  userRole: 'ARTIST' | 'LABEL' | 'ADMIN' | 'PUBLISHER' | 'PRO';
   currentPage?: string;
   currentView?: 'dashboard' | 'profile';
 }
@@ -59,10 +59,21 @@ export default function Sidebar({ userRole, currentPage = 'dashboard', currentVi
       { id: 'overview', label: 'System Overview', icon: BarChart3, href: '/admin/overview' },
       { id: 'investigation', label: 'Investigate', icon: Search, href: '/dashboard/admin/investigation' },
       { id: 'admin-tools', label: 'Admin Tools', icon: Shield, href: '/admin/tools' },
+      { id: 'modify-splits', label: 'Modify Splits', icon: FileText, href: '/admin/splits' },
       { id: 'invite-codes', label: 'Invite Codes', icon: Ticket, href: '/admin/invites' },
       { id: 'analytics', label: 'Analytics', icon: TrendingUp, href: '/admin/analytics' },
       { id: 'settings', label: 'Settings', icon: Settings, href: '/admin/settings' },
-    ]
+    ],
+    PUBLISHER: [
+      { id: 'my-splits', label: 'Split Sheets', icon: FileText, href: '/splits' },
+      { id: 'artists', label: 'Artists', icon: Users, href: '/dashboard/artists' },
+      { id: 'settings', label: 'Settings', icon: Settings, href: '/settings' },
+    ],
+    PRO: [
+      { id: 'my-splits', label: 'Split Sheets', icon: FileText, href: '/splits' },
+      { id: 'artists', label: 'Artists', icon: Users, href: '/dashboard/artists' },
+      { id: 'settings', label: 'Settings', icon: Settings, href: '/settings' },
+    ],
   };
 
   const allItems = [

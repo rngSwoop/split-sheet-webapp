@@ -8,7 +8,7 @@ This policy governs how long we retain different types of user data in complianc
 ### 🔄 Permanent / Life of Copyright + 10 Years
 **Data Types:**
 - **Split Sheet Records** (songId, status, clauses, totalPercentage, version)
-- **Contributor Legal Details** (legalName, stageName, role, percentage, proAffiliation, ipiNumber, publisher)
+- **Contributor Legal Details** (legalName, stageName, role, percentage, proAffiliation, publisher)
 - **Signature Data** (signatureData, signedAt, ipAddress, consentText, deviceInfo)
 - **Audit Log Entries** (action, performedBy, timestamp, oldValue, newValue)
 - **IP Numbers and Publisher Information**

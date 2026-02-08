@@ -3,7 +3,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import { motion } from 'framer-motion';
-import { ArrowLeft, Save, Music, User, Percent, Mail, Phone, MapPin, Building } from 'lucide-react';
+import { ArrowLeft, Save, Music, User, Percent, Mail, Phone, MapPin, Building, ShieldCheck, AlertTriangle, Send, Pencil, Search, X } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import DashboardLayout from '@/components/dashboard/DashboardLayout';
 
@@ -13,14 +13,25 @@ interface Contributor {
   legalName: string;
   stageName: string | null;
   role: string;
+  contributorType: string;
   percentage: number;
   proAffiliation: string | null;
-  ipiNumber: string | null;
-  publisher: string | null;
+  proOrgId: string | null;
+  proOtherText: string | null;
+  publisherCompany: string | null;
+  publisherName: string | null;
+  publisherContact: string | null;
+  publisherPhone: string | null;
+  publisherEmail: string | null;
+  publisherId: string | null;
   publisherShare: number | null;
   contactEmail: string | null;
   contactPhone: string | null;
   address: string | null;
+  labelId: string | null;
+  publisherEntity?: { id: string; name: string; contact: string | null; phone: string | null; email: string | null } | null;
+  proOrg?: { id: string; name: string } | null;
+  labelEntity?: { id: string; name: string } | null;
 }
 
 interface Song {
@@ -40,6 +51,7 @@ interface SplitSheet {
   status: string;
   totalPercentage: number;
   clauses: string | null;
+  disputedBy: string | null;
   createdAt: string;
   updatedAt: string;
   song: Song;
@@ -50,14 +62,27 @@ interface Permissions {
   canEditSongDetails: boolean;
   canAddRemoveContributors: boolean;
   editableContributorIds: string[];
+  canEditPercentage: boolean;
+  canFinalize: boolean;
+  canDispute: boolean;
+  isCreator: boolean;
+  isAdmin: boolean;
+  currentUserId: string;
 }
 
 interface ContributorFormData {
   percentage: number;
   proAffiliation: string;
-  ipiNumber: string;
-  publisher: string;
+  proOtherText: string;
+  publisherId: string | null;
+  publisherCompany: string;
+  publisherName: string;
+  publisherContact: string;
+  publisherPhone: string;
+  publisherEmail: string;
   publisherShare: string;
+  labelId: string | null;
+  labelName: string;
   contactEmail: string;
   contactPhone: string;
   address: string;
@@ -74,9 +99,16 @@ export default function SplitDetailPage() {
   const [error, setError] = useState<string | null>(null);
   const [savingId, setSavingId] = useState<string | null>(null);
   const [saveSuccess, setSaveSuccess] = useState<string | null>(null);
+  const [actionLoading, setActionLoading] = useState(false);
+  const [notifyLoading, setNotifyLoading] = useState(false);
+  const [notifySuccess, setNotifySuccess] = useState(false);
 
   // Track editable form state per contributor
   const [formData, setFormData] = useState<Record<string, ContributorFormData>>({});
+  // Publisher search state per contributor
+  const [pubSearch, setPubSearch] = useState<Record<string, { query: string; results: any[] }>>({});
+  // Label search state per contributor
+  const [labelSearch, setLabelSearch] = useState<Record<string, { query: string; results: any[] }>>({});
 
   const fetchSplit = useCallback(async () => {
     try {
@@ -98,9 +130,16 @@ export default function SplitDetailPage() {
           initialForms[c.id] = {
             percentage: c.percentage,
             proAffiliation: c.proAffiliation || '',
-            ipiNumber: c.ipiNumber || '',
-            publisher: c.publisher || '',
+            proOtherText: c.proOtherText || '',
+            publisherId: c.publisherId || null,
+            publisherCompany: c.publisherCompany || c.publisherEntity?.name || '',
+            publisherName: c.publisherName || '',
+            publisherContact: c.publisherContact || c.publisherEntity?.contact || '',
+            publisherPhone: c.publisherPhone || c.publisherEntity?.phone || '',
+            publisherEmail: c.publisherEmail || c.publisherEntity?.email || '',
             publisherShare: c.publisherShare?.toString() || '',
+            labelId: c.labelId || null,
+            labelName: c.labelEntity?.name || '',
             contactEmail: c.contactEmail || '',
             contactPhone: c.contactPhone || '',
             address: c.address || '',
@@ -133,20 +172,32 @@ export default function SplitDetailPage() {
     setSavingId(contributorId);
     setSaveSuccess(null);
     try {
+      const payload: Record<string, unknown> = {
+        contributorId,
+        proAffiliation: data.proAffiliation || null,
+        proOtherText: data.proOtherText || null,
+        publisherId: data.publisherId || null,
+        publisherCompany: data.publisherCompany || null,
+        publisherName: data.publisherName || null,
+        publisherContact: data.publisherContact || null,
+        publisherPhone: data.publisherPhone || null,
+        publisherEmail: data.publisherEmail || null,
+        publisherShare: data.publisherShare ? Number(data.publisherShare) : null,
+        labelId: data.labelId || null,
+        contactEmail: data.contactEmail || null,
+        contactPhone: data.contactPhone || null,
+        address: data.address || null,
+      };
+
+      // Only include percentage if the user has permission to edit it
+      if (permissions?.canEditPercentage) {
+        payload.percentage = Number(data.percentage);
+      }
+
       const res = await fetch(`/api/splits/${id}/contributor`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          contributorId,
-          percentage: Number(data.percentage),
-          proAffiliation: data.proAffiliation || null,
-          ipiNumber: data.ipiNumber || null,
-          publisher: data.publisher || null,
-          publisherShare: data.publisherShare ? Number(data.publisherShare) : null,
-          contactEmail: data.contactEmail || null,
-          contactPhone: data.contactPhone || null,
-          address: data.address || null,
-        }),
+        body: JSON.stringify(payload),
       });
 
       if (!res.ok) {
@@ -168,6 +219,59 @@ export default function SplitDetailPage() {
 
   const isEditable = (contributorId: string) =>
     permissions?.editableContributorIds.includes(contributorId) ?? false;
+
+  const handleFinalize = async () => {
+    setActionLoading(true);
+    try {
+      const res = await fetch(`/api/splits/${id}/finalize`, { method: 'POST' });
+      if (!res.ok) {
+        const data = await res.json();
+        alert(data.error || 'Failed to finalize');
+        return;
+      }
+      await fetchSplit();
+    } catch {
+      alert('Failed to finalize split sheet');
+    } finally {
+      setActionLoading(false);
+    }
+  };
+
+  const handleDispute = async () => {
+    setActionLoading(true);
+    try {
+      const res = await fetch(`/api/splits/${id}/dispute`, { method: 'POST' });
+      if (!res.ok) {
+        const data = await res.json();
+        alert(data.error || 'Failed to dispute');
+        return;
+      }
+      await fetchSplit();
+    } catch {
+      alert('Failed to dispute split sheet');
+    } finally {
+      setActionLoading(false);
+    }
+  };
+
+  const handleNotify = async () => {
+    setNotifyLoading(true);
+    setNotifySuccess(false);
+    try {
+      const res = await fetch(`/api/splits/${id}/notify`, { method: 'POST' });
+      if (!res.ok) {
+        const data = await res.json();
+        alert(data.error || 'Failed to send notifications');
+        return;
+      }
+      setNotifySuccess(true);
+      setTimeout(() => setNotifySuccess(false), 3000);
+    } catch {
+      alert('Failed to send notifications');
+    } finally {
+      setNotifyLoading(false);
+    }
+  };
 
   if (loading) {
     return (
@@ -212,17 +316,182 @@ export default function SplitDetailPage() {
               <p className="text-sm text-white/40">Working title: {split.song.workingTitle}</p>
             )}
           </div>
+          {permissions.canAddRemoveContributors && (
+            <button
+              onClick={() => router.push(`/splits/${id}/edit`)}
+              className="ml-auto p-2 rounded-xl hover:bg-white/10 transition-colors text-white/50 hover:text-violet-400"
+              title="Edit split sheet"
+            >
+              <Pencil className="w-4 h-4" />
+            </button>
+          )}
           <span className={cn(
-            'ml-auto px-3 py-1 rounded-full text-xs font-medium',
+            !permissions.canAddRemoveContributors && 'ml-auto',
+            'px-3 py-1 rounded-full text-xs font-medium',
             split.status === 'DRAFT' && 'bg-yellow-500/20 text-yellow-400',
             split.status === 'PENDING' && 'bg-blue-500/20 text-blue-400',
             split.status === 'SIGNED' && 'bg-green-500/20 text-green-400',
             split.status === 'PUBLISHED' && 'bg-violet-500/20 text-violet-400',
             split.status === 'REVERSED' && 'bg-red-500/20 text-red-400',
+            split.status === 'DISPUTED' && 'bg-orange-500/20 text-orange-400',
           )}>
             {split.status}
           </span>
         </div>
+
+        {/* Split overview */}
+        {split.contributors.length > 0 && (() => {
+          const writers = split.contributors.filter((c) => c.contributorType === 'WRITER' || !c.contributorType);
+          const producers = split.contributors.filter((c) => c.contributorType === 'PRODUCER');
+          const writerTotal = writers.reduce((s, c) => s + c.percentage, 0);
+          const producerTotal = producers.reduce((s, c) => s + c.percentage, 0);
+
+          return (
+            <motion.div
+              initial={{ opacity: 0, y: 12 }}
+              animate={{ opacity: 1, y: 0 }}
+              className="glass-card space-y-4"
+            >
+              {/* Writers row */}
+              <div>
+                <div className="flex items-center justify-between mb-2">
+                  <span className="text-xs text-white/40 uppercase tracking-wider">Writers</span>
+                  <span className={cn(
+                    'text-xs font-medium',
+                    writerTotal === 50 ? 'text-green-400' : 'text-yellow-400'
+                  )}>
+                    {writerTotal}%
+                  </span>
+                </div>
+                <div className="flex flex-wrap gap-2">
+                  {writers.map((c) => (
+                    <div
+                      key={c.id}
+                      className="flex items-center gap-2 bg-violet-500/10 border border-violet-500/20 rounded-lg px-3 py-1.5"
+                    >
+                      <span className="text-sm text-white font-medium">
+                        {c.stageName || c.legalName}
+                      </span>
+                      <span className="text-sm text-violet-400 font-semibold">{c.percentage}%</span>
+                    </div>
+                  ))}
+                  {writers.length === 0 && (
+                    <p className="text-xs text-white/30">No writers added</p>
+                  )}
+                </div>
+              </div>
+
+              {/* Producers row */}
+              <div>
+                <div className="flex items-center justify-between mb-2">
+                  <span className="text-xs text-white/40 uppercase tracking-wider">Producers</span>
+                  <span className={cn(
+                    'text-xs font-medium',
+                    producerTotal === 50 ? 'text-green-400' : 'text-white/40'
+                  )}>
+                    {producerTotal > 0 ? `${producerTotal}%` : '50% reserved'}
+                  </span>
+                </div>
+                <div className="flex flex-wrap gap-2">
+                  {producers.map((c) => (
+                    <div
+                      key={c.id}
+                      className="flex items-center gap-2 bg-blue-500/10 border border-blue-500/20 rounded-lg px-3 py-1.5"
+                    >
+                      <span className="text-sm text-white font-medium">
+                        {c.stageName || c.legalName}
+                      </span>
+                      <span className="text-sm text-blue-400 font-semibold">{c.percentage}%</span>
+                    </div>
+                  ))}
+                  {producers.length === 0 && (
+                    <p className="text-xs text-white/30 italic">No producers yet — 50% reserved</p>
+                  )}
+                </div>
+              </div>
+
+              {/* Total bar */}
+              <div className="pt-2 border-t border-white/5">
+                <div className="flex items-center justify-between">
+                  <span className="text-xs text-white/40">Total</span>
+                  <span className={cn(
+                    'text-sm font-semibold',
+                    writerTotal + producerTotal === 100 ? 'text-green-400' :
+                    writerTotal + producerTotal === 50 && producers.length === 0 ? 'text-white/60' :
+                    'text-yellow-400'
+                  )}>
+                    {writerTotal + producerTotal}%
+                  </span>
+                </div>
+                <div className="w-full h-1.5 bg-white/5 rounded-full mt-1 overflow-hidden flex">
+                  <div
+                    className="h-full bg-violet-500 rounded-l-full transition-all duration-300"
+                    style={{ width: `${writerTotal}%` }}
+                  />
+                  <div
+                    className="h-full bg-blue-500 rounded-r-full transition-all duration-300"
+                    style={{ width: `${producerTotal}%` }}
+                  />
+                </div>
+              </div>
+            </motion.div>
+          );
+        })()}
+
+        {/* Disputed banner */}
+        {split.status === 'DISPUTED' && (
+          <div className="flex items-center gap-2 px-4 py-3 bg-orange-500/10 border border-orange-500/20 rounded-xl text-orange-400 text-sm">
+            <AlertTriangle className="w-4 h-4 shrink-0" />
+            <span>This split sheet has been disputed. Contributors can edit their sections before re-finalization.</span>
+          </div>
+        )}
+
+        {/* Action buttons */}
+        {permissions && (permissions.canFinalize || permissions.canDispute || ((permissions.isCreator || permissions.isAdmin) && split.status !== 'SIGNED')) && (
+          <div className="flex gap-3 flex-wrap">
+            {permissions.canFinalize && (
+              <button
+                onClick={handleFinalize}
+                disabled={actionLoading}
+                className="glass-btn flex items-center gap-2 text-sm bg-green-500/10 border-green-500/30 hover:bg-green-500/20"
+              >
+                <ShieldCheck className="w-4 h-4" />
+                {actionLoading ? 'Processing...' : 'Finalize Split Sheet'}
+              </button>
+            )}
+            {permissions.canDispute && (
+              <button
+                onClick={handleDispute}
+                disabled={actionLoading}
+                className="glass-btn flex items-center gap-2 text-sm bg-orange-500/10 border-orange-500/30 hover:bg-orange-500/20"
+              >
+                <AlertTriangle className="w-4 h-4" />
+                {actionLoading ? 'Processing...' : 'Dispute Splits'}
+              </button>
+            )}
+            {(permissions.isCreator || permissions.isAdmin) && split.status !== 'SIGNED' && (
+              <button
+                onClick={handleNotify}
+                disabled={notifyLoading}
+                className={cn(
+                  'glass-btn flex items-center gap-2 text-sm transition-colors',
+                  notifySuccess
+                    ? 'bg-green-500/20 border-green-500/40 text-green-400'
+                    : 'bg-violet-500/10 border-violet-500/30 hover:bg-violet-500/20'
+                )}
+              >
+                <Send className="w-4 h-4" />
+                {notifyLoading ? 'Sending...' : notifySuccess ? 'Notifications Sent!' : 'Notify All Parties'}
+              </button>
+            )}
+            {split.status === 'SIGNED' && !permissions.canDispute && (
+              <span className="flex items-center gap-2 text-sm text-green-400 bg-green-500/10 px-3 py-1.5 rounded-lg">
+                <ShieldCheck className="w-4 h-4" />
+                Finalized
+              </span>
+            )}
+          </div>
+        )}
 
         {/* Song Details Card */}
         <motion.div
@@ -289,35 +558,47 @@ export default function SplitDetailPage() {
           {split.contributors.map((contributor, index) => {
             const editable = isEditable(contributor.id);
             const form = formData[contributor.id];
+            const isCurrentUser = contributor.userId === permissions.currentUserId;
+            const needsInput = editable && isCurrentUser && !permissions.isCreator;
 
             return (
-              <motion.div
-                key={contributor.id}
-                initial={{ opacity: 0, y: 12 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ delay: index * 0.05 }}
-                className={cn(
-                  'glass-card transition-all duration-300',
-                  editable
-                    ? 'border-violet-500/30 border'
-                    : 'opacity-70'
-                )}
-              >
-                {/* Contributor header */}
-                <div className="flex items-center justify-between mb-4">
-                  <div>
-                    <h3 className="text-white font-medium">
-                      {contributor.legalName}
-                      {contributor.stageName && (
-                        <span className="text-white/40 ml-2 text-sm">({contributor.stageName})</span>
-                      )}
-                    </h3>
-                    <p className="text-xs text-violet-400">{contributor.role}</p>
+              <div key={contributor.id} className="space-y-2">
+                {needsInput && (
+                  <div className="flex items-center gap-2 text-green-400 text-sm font-medium">
+                    <div className="w-2 h-2 rounded-full bg-green-400 animate-pulse" />
+                    Needs your input
                   </div>
+                )}
+                <motion.div
+                  initial={{ opacity: 0, y: 12 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ delay: index * 0.05 }}
+                  className={cn(
+                    'glass-card transition-all duration-300',
+                    needsInput
+                      ? 'border-green-500/40 border bg-green-500/5'
+                      : editable
+                        ? 'border-violet-500/30 border'
+                        : 'opacity-70'
+                  )}
+                >
+                  {/* Contributor header */}
+                  <div className="flex items-center justify-between mb-4">
+                    <div>
+                      <h3 className="text-white font-medium">
+                        {contributor.legalName}
+                        {contributor.stageName && (
+                          <span className="text-white/40 ml-2 text-sm">({contributor.stageName})</span>
+                        )}
+                      </h3>
+                      <p className="text-xs text-violet-400">{contributor.role}</p>
+                    </div>
                   <div className="flex items-center gap-2">
                     {editable && (
                       <span className="text-[10px] uppercase tracking-wider text-violet-400 bg-violet-500/10 px-2 py-0.5 rounded-full">
-                        Your section
+                        {permissions.isAdmin && contributor.userId !== permissions.currentUserId
+                          ? 'Admin edit'
+                          : 'Your section'}
                       </span>
                     )}
                     {!editable && (
@@ -336,15 +617,22 @@ export default function SplitDetailPage() {
                       <div>
                         <label className="flex items-center gap-1 text-xs text-white/50 mb-1">
                           <Percent className="w-3 h-3" /> Split Percentage
+                          {!permissions.canEditPercentage && (
+                            <span className="text-white/30 ml-1">(locked)</span>
+                          )}
                         </label>
                         <input
                           type="number"
                           min={0}
                           max={100}
-                          step={0.01}
-                          value={form.percentage}
+                          step={1}
+                          value={form.percentage || ''}
                           onChange={(e) => updateField(contributor.id, 'percentage', Number(e.target.value))}
-                          className="w-full bg-white/5 border border-white/10 rounded-lg px-3 py-2 text-white text-sm focus:outline-none focus:border-violet-500/50"
+                          disabled={!permissions.canEditPercentage}
+                          className={cn(
+                            'w-full bg-white/5 border border-white/10 rounded-lg px-3 py-2 text-white text-sm focus:outline-none focus:border-violet-500/50',
+                            !permissions.canEditPercentage && 'opacity-50 cursor-not-allowed'
+                          )}
                         />
                       </div>
 
@@ -353,58 +641,266 @@ export default function SplitDetailPage() {
                         <label className="flex items-center gap-1 text-xs text-white/50 mb-1">
                           <Building className="w-3 h-3" /> PRO Affiliation
                         </label>
-                        <input
-                          type="text"
+                        <select
                           value={form.proAffiliation}
                           onChange={(e) => updateField(contributor.id, 'proAffiliation', e.target.value)}
-                          placeholder="e.g., ASCAP, BMI, SESAC"
-                          className="w-full bg-white/5 border border-white/10 rounded-lg px-3 py-2 text-white text-sm placeholder:text-white/20 focus:outline-none focus:border-violet-500/50"
-                        />
+                          className="w-full bg-white/5 border border-white/10 rounded-lg px-3 py-2 text-white text-sm focus:outline-none focus:border-violet-500/50"
+                        >
+                          <option value="" className="bg-gray-900">Select PRO...</option>
+                          <option value="ASCAP" className="bg-gray-900">ASCAP</option>
+                          <option value="BMI" className="bg-gray-900">BMI</option>
+                          <option value="SESAC" className="bg-gray-900">SESAC</option>
+                          <option value="NONE" className="bg-gray-900">NONE (Independent)</option>
+                          <option value="OTHER" className="bg-gray-900">Other</option>
+                        </select>
                       </div>
 
-                      {/* IPI Number */}
-                      <div>
-                        <label className="text-xs text-white/50 mb-1 block">IPI Number</label>
-                        <input
-                          type="text"
-                          value={form.ipiNumber}
-                          onChange={(e) => updateField(contributor.id, 'ipiNumber', e.target.value)}
-                          placeholder="IPI/CAE number"
-                          className="w-full bg-white/5 border border-white/10 rounded-lg px-3 py-2 text-white text-sm placeholder:text-white/20 focus:outline-none focus:border-violet-500/50"
-                        />
+                      {/* PRO Other Text */}
+                      {form.proAffiliation === 'OTHER' && (
+                        <div>
+                          <label className="text-xs text-white/50 mb-1 block">PRO Name</label>
+                          <input
+                            type="text"
+                            value={form.proOtherText}
+                            onChange={(e) => updateField(contributor.id, 'proOtherText', e.target.value)}
+                            placeholder="Enter PRO name"
+                            className="w-full bg-white/5 border border-white/10 rounded-lg px-3 py-2 text-white text-sm placeholder:text-white/20 focus:outline-none focus:border-violet-500/50"
+                          />
+                        </div>
+                      )}
+
+                      {/* Publisher section */}
+                      <div className="col-span-full bg-black/10 rounded-lg p-3 space-y-3">
+                        <label className="text-xs text-white/50 uppercase tracking-wider flex items-center gap-1">
+                          <Building className="w-3 h-3" /> Publisher
+                        </label>
+
+                        {form.publisherId ? (
+                          /* Publisher selected — read-only info + share */
+                          <div className="space-y-3">
+                            <div className="flex items-center justify-between">
+                              <div>
+                                <p className="text-sm font-medium text-white">{form.publisherCompany}</p>
+                                {form.publisherEmail && (
+                                  <p className="text-xs text-white/40">{form.publisherEmail}</p>
+                                )}
+                                {form.publisherPhone && (
+                                  <p className="text-xs text-white/40">{form.publisherPhone}</p>
+                                )}
+                              </div>
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  updateField(contributor.id, 'publisherId', '');
+                                  updateField(contributor.id, 'publisherCompany', '');
+                                  updateField(contributor.id, 'publisherName', '');
+                                  updateField(contributor.id, 'publisherContact', '');
+                                  updateField(contributor.id, 'publisherPhone', '');
+                                  updateField(contributor.id, 'publisherEmail', '');
+                                  updateField(contributor.id, 'publisherShare', '');
+                                }}
+                                className="p-1.5 rounded-lg hover:bg-red-500/20 text-white/30 hover:text-red-400 transition-colors"
+                                title="Remove publisher"
+                              >
+                                <X className="w-4 h-4" />
+                              </button>
+                            </div>
+                            <div>
+                              <label className="text-xs text-white/40 mb-1 block">Publisher Share (%)</label>
+                              <input
+                                type="number"
+                                min={0}
+                                max={100}
+                                step={1}
+                                value={form.publisherShare}
+                                onChange={(e) => updateField(contributor.id, 'publisherShare', e.target.value)}
+                                placeholder="e.g., 50"
+                                className="w-full bg-white/5 border border-white/10 rounded-lg px-3 py-2 text-white text-sm placeholder:text-white/20 focus:outline-none focus:border-violet-500/50"
+                              />
+                            </div>
+                          </div>
+                        ) : (
+                          /* No publisher — search */
+                          <div>
+                            <div className="flex gap-2">
+                              <input
+                                type="text"
+                                value={pubSearch[contributor.id]?.query || ''}
+                                onChange={(e) => setPubSearch((prev) => ({
+                                  ...prev,
+                                  [contributor.id]: { ...prev[contributor.id], query: e.target.value, results: prev[contributor.id]?.results || [] },
+                                }))}
+                                placeholder="Search publisher by name..."
+                                className="flex-1 bg-white/5 border border-white/10 rounded-lg px-3 py-2 text-white text-sm placeholder:text-white/20 focus:outline-none focus:border-violet-500/50"
+                                onKeyDown={(e) => {
+                                  if (e.key === 'Enter') {
+                                    e.preventDefault();
+                                    const q = pubSearch[contributor.id]?.query?.trim();
+                                    if (!q) return;
+                                    fetch(`/api/publishers/search?q=${encodeURIComponent(q)}`)
+                                      .then((r) => r.json())
+                                      .then((data) => setPubSearch((prev) => ({
+                                        ...prev,
+                                        [contributor.id]: { query: prev[contributor.id]?.query || '', results: data.publishers || [] },
+                                      })))
+                                      .catch(() => {});
+                                  }
+                                }}
+                              />
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  const q = pubSearch[contributor.id]?.query?.trim();
+                                  if (!q) return;
+                                  fetch(`/api/publishers/search?q=${encodeURIComponent(q)}`)
+                                    .then((r) => r.json())
+                                    .then((data) => setPubSearch((prev) => ({
+                                      ...prev,
+                                      [contributor.id]: { query: prev[contributor.id]?.query || '', results: data.publishers || [] },
+                                    })))
+                                    .catch(() => {});
+                                }}
+                                className="glass-btn px-3 py-2 text-sm"
+                              >
+                                <Search className="w-4 h-4" />
+                              </button>
+                            </div>
+                            {(pubSearch[contributor.id]?.results?.length || 0) > 0 && (
+                              <div className="mt-2 bg-black/20 rounded max-h-32 overflow-auto">
+                                {pubSearch[contributor.id].results.map((pub: any) => (
+                                  <div
+                                    key={pub.id}
+                                    className="p-2 hover:bg-white/10 cursor-pointer text-sm"
+                                    onClick={() => {
+                                      setFormData((prev) => ({
+                                        ...prev,
+                                        [contributor.id]: {
+                                          ...prev[contributor.id],
+                                          publisherId: pub.id,
+                                          publisherCompany: pub.name || '',
+                                          publisherContact: pub.contact || '',
+                                          publisherPhone: pub.phone || '',
+                                          publisherEmail: pub.email || '',
+                                        },
+                                      }));
+                                      setPubSearch((prev) => ({
+                                        ...prev,
+                                        [contributor.id]: { query: '', results: [] },
+                                      }));
+                                    }}
+                                  >
+                                    <div className="font-medium text-white">{pub.name}</div>
+                                    {pub.email && <div className="text-xs text-white/40">{pub.email}</div>}
+                                  </div>
+                                ))}
+                              </div>
+                            )}
+                            <p className="text-xs text-white/30 mt-1">None / Self-Published</p>
+                          </div>
+                        )}
                       </div>
 
-                      {/* Publisher */}
-                      <div>
-                        <label className="text-xs text-white/50 mb-1 block">Publisher</label>
-                        <input
-                          type="text"
-                          value={form.publisher}
-                          onChange={(e) => updateField(contributor.id, 'publisher', e.target.value)}
-                          placeholder="Publisher name"
-                          className="w-full bg-white/5 border border-white/10 rounded-lg px-3 py-2 text-white text-sm placeholder:text-white/20 focus:outline-none focus:border-violet-500/50"
-                        />
+                      {/* Label section */}
+                      <div className="col-span-full bg-black/10 rounded-lg p-3 space-y-3">
+                        <label className="text-xs text-white/50 uppercase tracking-wider">Label</label>
+
+                        {form.labelId ? (
+                          /* Label selected — read-only display */
+                          <div className="flex items-center justify-between">
+                            <p className="text-sm font-medium text-white">{form.labelName}</p>
+                            <button
+                              type="button"
+                              onClick={() => {
+                                updateField(contributor.id, 'labelId', '');
+                                updateField(contributor.id, 'labelName', '');
+                              }}
+                              className="p-1.5 rounded-lg hover:bg-red-500/20 text-white/30 hover:text-red-400 transition-colors"
+                              title="Remove label"
+                            >
+                              <X className="w-4 h-4" />
+                            </button>
+                          </div>
+                        ) : (
+                          /* No label — search */
+                          <div>
+                            <div className="flex gap-2">
+                              <input
+                                type="text"
+                                value={labelSearch[contributor.id]?.query || ''}
+                                onChange={(e) => setLabelSearch((prev) => ({
+                                  ...prev,
+                                  [contributor.id]: { ...prev[contributor.id], query: e.target.value, results: prev[contributor.id]?.results || [] },
+                                }))}
+                                placeholder="Search label by name..."
+                                className="flex-1 bg-white/5 border border-white/10 rounded-lg px-3 py-2 text-white text-sm placeholder:text-white/20 focus:outline-none focus:border-violet-500/50"
+                                onKeyDown={(e) => {
+                                  if (e.key === 'Enter') {
+                                    e.preventDefault();
+                                    const q = labelSearch[contributor.id]?.query?.trim();
+                                    if (!q) return;
+                                    fetch(`/api/labels/search?q=${encodeURIComponent(q)}`)
+                                      .then((r) => r.json())
+                                      .then((data) => setLabelSearch((prev) => ({
+                                        ...prev,
+                                        [contributor.id]: { query: prev[contributor.id]?.query || '', results: data.labels || [] },
+                                      })))
+                                      .catch(() => {});
+                                  }
+                                }}
+                              />
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  const q = labelSearch[contributor.id]?.query?.trim();
+                                  if (!q) return;
+                                  fetch(`/api/labels/search?q=${encodeURIComponent(q)}`)
+                                    .then((r) => r.json())
+                                    .then((data) => setLabelSearch((prev) => ({
+                                      ...prev,
+                                      [contributor.id]: { query: prev[contributor.id]?.query || '', results: data.labels || [] },
+                                    })))
+                                    .catch(() => {});
+                                }}
+                                className="glass-btn px-3 py-2 text-sm"
+                              >
+                                <Search className="w-4 h-4" />
+                              </button>
+                            </div>
+                            {(labelSearch[contributor.id]?.results?.length || 0) > 0 && (
+                              <div className="mt-2 bg-black/20 rounded max-h-32 overflow-auto">
+                                {labelSearch[contributor.id].results.map((label: any) => (
+                                  <div
+                                    key={label.id}
+                                    className="p-2 hover:bg-white/10 cursor-pointer text-sm"
+                                    onClick={() => {
+                                      setFormData((prev) => ({
+                                        ...prev,
+                                        [contributor.id]: {
+                                          ...prev[contributor.id],
+                                          labelId: label.id,
+                                          labelName: label.name,
+                                        },
+                                      }));
+                                      setLabelSearch((prev) => ({
+                                        ...prev,
+                                        [contributor.id]: { query: '', results: [] },
+                                      }));
+                                    }}
+                                  >
+                                    <div className="font-medium text-white">{label.name}</div>
+                                  </div>
+                                ))}
+                              </div>
+                            )}
+                            <p className="text-xs text-white/30 mt-1">None / Independent</p>
+                          </div>
+                        )}
                       </div>
 
-                      {/* Publisher Share */}
-                      <div>
-                        <label className="text-xs text-white/50 mb-1 block">Publisher Share (%)</label>
-                        <input
-                          type="number"
-                          min={0}
-                          max={100}
-                          step={0.01}
-                          value={form.publisherShare}
-                          onChange={(e) => updateField(contributor.id, 'publisherShare', e.target.value)}
-                          placeholder="e.g., 50"
-                          className="w-full bg-white/5 border border-white/10 rounded-lg px-3 py-2 text-white text-sm placeholder:text-white/20 focus:outline-none focus:border-violet-500/50"
-                        />
-                      </div>
-
-                      {/* Contact Email */}
+                      {/* Personal Email */}
                       <div>
                         <label className="flex items-center gap-1 text-xs text-white/50 mb-1">
-                          <Mail className="w-3 h-3" /> Contact Email
+                          <Mail className="w-3 h-3" /> Personal Email
                         </label>
                         <input
                           type="email"
@@ -415,16 +911,16 @@ export default function SplitDetailPage() {
                         />
                       </div>
 
-                      {/* Contact Phone */}
+                      {/* Personal Phone */}
                       <div>
                         <label className="flex items-center gap-1 text-xs text-white/50 mb-1">
-                          <Phone className="w-3 h-3" /> Contact Phone
+                          <Phone className="w-3 h-3" /> Personal Phone
                         </label>
                         <input
                           type="tel"
                           value={form.contactPhone}
                           onChange={(e) => updateField(contributor.id, 'contactPhone', e.target.value)}
-                          placeholder="Phone number"
+                          placeholder="Co-writer phone number"
                           className="w-full bg-white/5 border border-white/10 rounded-lg px-3 py-2 text-white text-sm placeholder:text-white/20 focus:outline-none focus:border-violet-500/50"
                         />
                       </div>
@@ -459,31 +955,40 @@ export default function SplitDetailPage() {
                           ? 'Saving...'
                           : saveSuccess === contributor.id
                           ? 'Saved!'
-                          : 'Save Changes'}
+                          : permissions?.isCreator ? 'Save Changes' : 'Save and Send for Review'}
                       </button>
                     </div>
                   </div>
                 ) : (
                   /* Read-only display */
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                    <ReadOnlyField label="Type" value={contributor.contributorType || 'WRITER'} />
                     <ReadOnlyField label="Percentage" value={`${contributor.percentage}%`} />
                     {contributor.proAffiliation && (
-                      <ReadOnlyField label="PRO Affiliation" value={contributor.proAffiliation} />
+                      <ReadOnlyField
+                        label="PRO Affiliation"
+                        value={contributor.proAffiliation === 'OTHER' && contributor.proOtherText
+                          ? contributor.proOtherText
+                          : contributor.proOrg?.name || contributor.proAffiliation}
+                      />
                     )}
-                    {contributor.ipiNumber && (
-                      <ReadOnlyField label="IPI Number" value={contributor.ipiNumber} />
+                    {(contributor.publisherEntity || contributor.publisherCompany) && (
+                      <ReadOnlyField
+                        label="Publisher"
+                        value={contributor.publisherEntity?.name || contributor.publisherCompany || ''}
+                      />
                     )}
-                    {contributor.publisher && (
-                      <ReadOnlyField label="Publisher" value={contributor.publisher} />
-                    )}
-                    {contributor.publisherShare != null && (
+                    {contributor.publisherShare != null && contributor.publisherShare > 0 && (
                       <ReadOnlyField label="Publisher Share" value={`${contributor.publisherShare}%`} />
                     )}
+                    {contributor.labelEntity && (
+                      <ReadOnlyField label="Label" value={contributor.labelEntity.name} />
+                    )}
                     {contributor.contactEmail && (
-                      <ReadOnlyField label="Contact Email" value={contributor.contactEmail} />
+                      <ReadOnlyField label="Personal Email" value={contributor.contactEmail} />
                     )}
                     {contributor.contactPhone && (
-                      <ReadOnlyField label="Contact Phone" value={contributor.contactPhone} />
+                      <ReadOnlyField label="Personal Phone" value={contributor.contactPhone} />
                     )}
                     {contributor.address && (
                       <ReadOnlyField label="Address" value={contributor.address} />
@@ -491,6 +996,7 @@ export default function SplitDetailPage() {
                   </div>
                 )}
               </motion.div>
+              </div>
             );
           })}
         </div>

@@ -5,7 +5,7 @@ import { useEffect, useState } from 'react';
 import GlassButton from '@/components/ui/GlassButton';
 
 export default function AdminInvites() {
-  const [role, setRole] = useState<'LABEL' | 'ADMIN'>('LABEL');
+  const [role, setRole] = useState<'LABEL' | 'ADMIN' | 'PUBLISHER' | 'PRO'>('LABEL');
   const [code, setCode] = useState('');
   const [invites, setInvites] = useState<Array<any>>([]);
   const [error, setError] = useState<string | null>(null);
@@ -69,11 +69,13 @@ export default function AdminInvites() {
             <select
               id="role"
               value={role}
-              onChange={(e) => setRole(e.target.value as 'LABEL' | 'ADMIN')}
+              onChange={(e) => setRole(e.target.value as 'LABEL' | 'ADMIN' | 'PUBLISHER' | 'PRO')}
               className="w-full p-4 bg-[var(--color-glass-dark)] backdrop-blur-sm border border-white/10 rounded-xl text-white focus:border-[var(--color-accent)] focus:ring-2 focus:ring-[var(--color-glow)] focus:outline-none transition-all"
             >
               <option value="LABEL">Label</option>
               <option value="ADMIN">Admin</option>
+              <option value="PUBLISHER">Publisher</option>
+              <option value="PRO">PRO</option>
             </select>
           </div>
           <GlassButton onClick={handleGenerate} className="w-full" disabled={loading}>

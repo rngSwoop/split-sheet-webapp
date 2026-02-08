@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { getCurrentUser } from '@/lib/auth';
-import { createBulkNotifications } from '@/lib/notifications';
+import { createBulkNotifications, sendFinalizationNotifications } from '@/lib/notifications';
 
 export async function GET(request: Request) {
   const currentUser = await getCurrentUser();
@@ -20,7 +20,7 @@ export async function GET(request: Request) {
             { contributors: { some: { userId: currentUser.id } } },
           ],
         },
-        include: { contributors: true, signatures: true },
+        include: { song: true, contributors: true, signatures: true },
         orderBy: { createdAt: 'desc' },
       });
       return NextResponse.json({ splits });
@@ -29,7 +29,7 @@ export async function GET(request: Request) {
     // Default: return splits created by current user
     const splits = await prisma.splitSheet.findMany({
       where: { createdBy: currentUser.id },
-      include: { contributors: true, signatures: true },
+      include: { song: true, contributors: true, signatures: true },
       orderBy: { createdAt: 'desc' },
     });
 
@@ -55,13 +55,26 @@ export async function POST(request: Request) {
       agreementDate,
       clauses,
       contributors,
+      status: requestedStatus,
     } = body;
 
     if (!finalTitle || !contributors || !Array.isArray(contributors) || contributors.length === 0) {
       return NextResponse.json({ error: 'Invalid payload' }, { status: 400 });
     }
 
+    // Validate requested status
+    const validStatuses = ['PENDING', 'SIGNED'];
+    const statusToUse = validStatuses.includes(requestedStatus) ? requestedStatus : 'PENDING';
+
     const total = contributors.reduce((s: number, c: any) => s + Number(c.percentage || 0), 0);
+
+    // Writer percentages must sum to 50 — only enforced for SIGNED (finalize)
+    const writerTotal = contributors
+      .filter((c: any) => !c.contributorType || c.contributorType === 'WRITER')
+      .reduce((s: number, c: any) => s + Number(c.percentage || 0), 0);
+    if (statusToUse === 'SIGNED' && writerTotal !== 50) {
+      return NextResponse.json({ error: 'Writer percentages must total 50%' }, { status: 400 });
+    }
 
     // If songId not provided, create Song record
     let songConnect = undefined;
@@ -84,7 +97,7 @@ export async function POST(request: Request) {
         createdBy: currentUser.id,
         version: 1,
         agreementDate: agreementDate ? new Date(agreementDate) : null,
-        status: 'DRAFT',
+        status: statusToUse,
         totalPercentage: total,
         clauses: clauses || '',
         contributors: {
@@ -93,11 +106,19 @@ export async function POST(request: Request) {
             legalName: c.legalName,
             stageName: c.stageName || null,
             role: c.role || 'Contributor',
+            contributorType: c.contributorType || 'WRITER',
             percentage: Number(c.percentage || 0),
             proAffiliation: c.proAffiliation || null,
-            ipiNumber: c.ipiNumber || null,
-            publisher: c.publisher || null,
+            proOrgId: c.proOrgId || null,
+            proOtherText: c.proOtherText || null,
+            publisherCompany: c.publisherCompany || null,
+            publisherName: c.publisherName || null,
+            publisherContact: c.publisherContact || null,
+            publisherPhone: c.publisherPhone || null,
+            publisherEmail: c.publisherEmail || null,
+            publisherId: c.publisherId || null,
             publisherShare: c.publisherShare ?? null,
+            labelId: c.labelId || null,
             contactEmail: c.contactEmail || null,
             contactPhone: c.contactPhone || null,
             address: c.address || null,
@@ -111,7 +132,11 @@ export async function POST(request: Request) {
     const contributorsToNotify = split.contributors.filter(
       (c) => c.userId && c.userId !== currentUser.id
     );
-    if (contributorsToNotify.length > 0) {
+    if (statusToUse === 'SIGNED') {
+      // Finalized on creation — send finalization notifications
+      await sendFinalizationNotifications(split.id, finalTitle, split.contributors, currentUser.id);
+    } else if (contributorsToNotify.length > 0) {
+      // Pending — send invite notifications
       await createBulkNotifications(
         contributorsToNotify.map((c) => ({
           userId: c.userId!,

@@ -15,7 +15,7 @@ interface DashboardLayoutProps {
 }
 
 export default function DashboardLayout({ children, currentPage = 'dashboard' }: DashboardLayoutProps) {
-  const [userRole, setUserRole] = useState<'ARTIST' | 'LABEL' | 'ADMIN'>('ARTIST');
+  const [userRole, setUserRole] = useState<'ARTIST' | 'LABEL' | 'ADMIN' | 'PUBLISHER' | 'PRO'>('ARTIST');
   const [loading, setLoading] = useState(true);
   const [currentView, setCurrentView] = useState<'dashboard' | 'profile'>('dashboard');
   const router = useRouter();
